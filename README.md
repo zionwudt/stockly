@@ -14,7 +14,7 @@
 - 后端: Python
 - 前端: 单 HTML 入口 + ES Modules
 - 存储: SQLite
-- 依赖: 标准库即可运行，无需第三方包
+- 运行时依赖: 标准库即可运行，无需第三方包
 
 ## Python 项目约定
 
@@ -22,6 +22,7 @@
 
 - 使用 `pyproject.toml` 描述项目
 - 推荐使用仓库根目录下的 `.venv` 作为本地虚拟环境
+- 测试时可通过 `pip install -e ".[test]"` 安装 `pytest`
 - `.venv/` 不纳入 Git 版本控制
 
 ## MVP 设计边界
@@ -122,6 +123,13 @@ python -m pip install --upgrade pip
 pip install -e .
 ```
 
+如果你要运行测试，安装测试依赖并执行:
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
 然后启动服务:
 
 ```bash
@@ -168,4 +176,4 @@ python backend/app.py --port 9000 --db ./data/dev.db
 2. 增加登录、角色和操作日志
 3. 增加采购单 / 销售单状态流转
 4. 增加基础报表和导出
-5. 引入测试和持续集成
+5. 扩展测试覆盖并接入持续集成

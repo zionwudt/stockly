@@ -34,6 +34,10 @@ body {
     linear-gradient(180deg, #faf4ea 0%, var(--bg) 100%);
 }
 
+.auth-screen[hidden] {
+  display: none;
+}
+
 .auth-screen {
   min-height: 100vh;
   display: grid;

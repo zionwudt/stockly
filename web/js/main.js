@@ -183,12 +183,13 @@ async function restoreSession() {
 
 async function handleLoginSubmit(event) {
   event.preventDefault();
-  const payload = formToObject(event.currentTarget);
+  const form = event.currentTarget;
+  const payload = formToObject(form);
 
   try {
     state.auth = await api.login(payload);
     clearDomainState();
-    event.currentTarget.elements.password.value = "";
+    form.elements.password.value = "";
     showAppShell();
     await refreshData("登录成功。");
   } catch (error) {
@@ -211,15 +212,16 @@ async function handleLogout() {
 
 async function handleProductSubmit(event) {
   event.preventDefault();
-  const payload = formToObject(event.currentTarget);
+  const form = event.currentTarget;
+  const payload = formToObject(form);
 
   try {
     await api.createProduct(payload);
-    event.currentTarget.reset();
-    event.currentTarget.elements.unit.value = "件";
-    event.currentTarget.elements.purchase_price.value = "0";
-    event.currentTarget.elements.sale_price.value = "0";
-    event.currentTarget.elements.safety_stock.value = "0";
+    form.reset();
+    form.elements.unit.value = "件";
+    form.elements.purchase_price.value = "0";
+    form.elements.sale_price.value = "0";
+    form.elements.safety_stock.value = "0";
     state.ui.activeView = "more";
     state.ui.activeMoreTab = "products";
     await refreshData("商品已创建。");
@@ -230,12 +232,13 @@ async function handleProductSubmit(event) {
 
 async function handlePartnerSubmit(event, partnerType) {
   event.preventDefault();
-  const payload = formToObject(event.currentTarget);
+  const form = event.currentTarget;
+  const payload = formToObject(form);
   const action = partnerType === "supplier" ? api.createSupplier : api.createCustomer;
 
   try {
     await action(payload);
-    event.currentTarget.reset();
+    form.reset();
     state.ui.activeView = "more";
     state.ui.activeMoreTab = partnerType === "supplier" ? "suppliers" : "customers";
     await refreshData(partnerType === "supplier" ? "供应商已创建。" : "客户已创建。");
