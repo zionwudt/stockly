@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jiancang-mvp"
+version = "0.1.0"
+description = "简仓，面向小团队的进销存管理系统 MVP"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+jiancang = "app:main"
+
+[tool.setuptools]
+package-dir = {"" = "backend"}
+py-modules = ["app"]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
