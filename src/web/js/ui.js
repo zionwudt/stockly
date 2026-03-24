@@ -2,13 +2,19 @@ const refs = {
   tenantBadge: document.querySelector("#tenant-badge"),
   userBadge: document.querySelector("#user-badge"),
   statusSummary: document.querySelector("#status-summary"),
+  metricsSection: document.querySelector("#metrics-section"),
   metricsGrid: document.querySelector("#metrics-grid"),
   inventorySummary: document.querySelector("#inventory-summary"),
   documentSummary: document.querySelector("#document-summary"),
+  tenantSummary: document.querySelector("#tenant-summary"),
   alertList: document.querySelector("#alert-list"),
   stockList: document.querySelector("#stock-list"),
   movementList: document.querySelector("#movement-list"),
   documentList: document.querySelector("#document-list"),
+  tenantAccessList: document.querySelector("#tenant-access-list"),
+  tenantDirectoryList: document.querySelector("#tenant-directory-list"),
+  myJoinRequestList: document.querySelector("#my-join-request-list"),
+  tenantApprovalList: document.querySelector("#tenant-approval-list"),
   productList: document.querySelector("#product-list"),
   supplierList: document.querySelector("#supplier-list"),
   customerList: document.querySelector("#customer-list"),
@@ -18,6 +24,9 @@ const refs = {
   purchaseItems: document.querySelector("#purchase-items"),
   saleItems: document.querySelector("#sale-items"),
   inventorySearch: document.querySelector("#inventory-search"),
+  composerTrigger: document.querySelector("#composer-trigger"),
+  authTabButtons: Array.from(document.querySelectorAll("[data-auth-tab]")),
+  authPanels: Array.from(document.querySelectorAll("[data-auth-panel]")),
   views: Array.from(document.querySelectorAll(".app-view")),
   viewButtons: Array.from(document.querySelectorAll("[data-view-btn]")),
   stockFilterButtons: Array.from(document.querySelectorAll("[data-stock-filter]")),
@@ -39,12 +48,13 @@ const metricLabels = [
 
 export function renderApp(state) {
   renderIdentity(state.auth || null);
-  renderStatusSummary(state.summary?.metrics || {});
-  renderMetrics(state.summary?.metrics || {});
+  renderStatusSummary(state.auth || null, state.summary?.metrics || {});
+  renderMetrics(state.summary?.metrics || {}, Boolean(state.auth?.current_tenant));
   renderAlerts(state.summary?.alerts || []);
   renderStock(state.stock || [], state.ui?.inventoryQuery || "", state.ui?.inventoryFilter || "all");
   renderMovements(state.movements || []);
   renderDocuments(state.documents || [], state.ui?.documentFilter || "all");
+  renderTenantHub(state.tenantHub || null, state.auth || null);
   renderMiniList(refs.productList, state.products || [], (item) => renderProductRow(item, state.stock || []));
   renderMiniList(refs.supplierList, state.suppliers || [], renderPartnerRow);
   renderMiniList(refs.customerList, state.customers || [], renderPartnerRow);
@@ -53,7 +63,7 @@ export function renderApp(state) {
   renderProductSelect(refs.adjustmentProductSelect, state.products || [], "请选择商品");
   ensureLineItems("purchase", state.products || []);
   ensureLineItems("sale", state.products || []);
-  applyUiState(state.ui || {});
+  applyUiState(state.ui || {}, state.auth || null);
 }
 
 export function appendLineItem(kind, products) {
@@ -83,22 +93,44 @@ export function showToast(message, duration = 2200) {
   }, duration);
 }
 
-function renderStatusSummary(metrics) {
+function renderStatusSummary(auth, metrics) {
+  if (!auth) {
+    refs.statusSummary.textContent = "登录后可创建租户、申请加入现有租户，并进入对应工作区。";
+    return;
+  }
+
+  if (!auth.current_tenant) {
+    refs.statusSummary.textContent =
+      `当前账号 ${auth.user.display_name} 还没有选中租户，请先在租户中心创建租户或申请加入一个已有租户。`;
+    return;
+  }
+
   refs.statusSummary.textContent =
-    `当前库存货值 ${formatShortCurrency(metrics.stock_value ?? 0)}，共有 ${metrics.product_count ?? 0} 个 SKU，${metrics.alert_count ?? 0} 个商品需要关注。`;
+    `当前租户库存货值 ${formatShortCurrency(metrics.stock_value ?? 0)}，共有 ${metrics.product_count ?? 0} 个 SKU，${metrics.alert_count ?? 0} 个商品需要关注。`;
 }
 
 function renderIdentity(auth) {
   if (!auth) {
-    refs.tenantBadge.textContent = "进销存作业台";
+    refs.tenantBadge.textContent = "未选择租户";
     refs.userBadge.textContent = "未登录";
     return;
   }
-  refs.tenantBadge.textContent = `${auth.tenant.name} · ${auth.tenant.slug}`;
+
+  if (!auth.current_tenant) {
+    refs.tenantBadge.textContent = "未选择租户";
+  } else {
+    refs.tenantBadge.textContent = `${auth.current_tenant.name} · ${auth.current_tenant.slug}`;
+  }
   refs.userBadge.textContent = `${auth.user.display_name} · ${auth.user.username}`;
 }
 
-function renderMetrics(metrics) {
+function renderMetrics(metrics, hasCurrentTenant) {
+  refs.metricsSection.hidden = !hasCurrentTenant;
+  if (!hasCurrentTenant) {
+    refs.metricsGrid.innerHTML = "";
+    return;
+  }
+
   const metricData = {
     ...metrics,
     document_total: Number(metrics.purchase_count || 0) + Number(metrics.sale_count || 0),
@@ -252,6 +284,139 @@ function renderDocuments(items, filter) {
     .join("");
 }
 
+function renderTenantHub(hub, auth) {
+  const accessible = hub?.accessible_tenants || auth?.available_tenants || [];
+  const discoverable = hub?.discoverable_tenants || [];
+  const myRequests = hub?.my_join_requests || [];
+  const pendingApprovals = hub?.pending_approvals || [];
+
+  refs.tenantSummary.textContent = `我可访问 ${accessible.length} 个租户，待审批 ${pendingApprovals.length} 条`;
+  renderTenantAccessList(accessible);
+  renderTenantDirectoryList(discoverable);
+  renderMyRequestList(myRequests);
+  renderPendingApprovalList(pendingApprovals);
+}
+
+function renderTenantAccessList(items) {
+  if (!items.length) {
+    refs.tenantAccessList.innerHTML = `<div class="empty-state">你还没有加入任何租户。先新建一个，或在右侧提交加入申请。</div>`;
+    return;
+  }
+
+  refs.tenantAccessList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dense-row">
+          <div class="row-head">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(item.name)}</div>
+              <div class="row-subtitle">${escapeHtml(item.slug)} · ${item.is_owner ? "创建者" : "成员"}</div>
+            </div>
+            <div class="row-side tenant-row-side">
+              <span class="status-chip ${item.is_current ? "safe" : "info"}">${item.is_current ? "当前" : item.is_owner ? "创建者" : "成员"}</span>
+              ${item.is_current ? "" : `<button type="button" class="ghost-button small" data-switch-tenant="${item.id}">切换到此租户</button>`}
+            </div>
+          </div>
+          <div class="row-stats">
+            <span class="stat-pill"><span>成员</span>${item.member_count}</span>
+            <span class="stat-pill"><span>待审批</span>${item.pending_request_count}</span>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderTenantDirectoryList(items) {
+  if (!items.length) {
+    refs.tenantDirectoryList.innerHTML = `<div class="empty-state">当前没有可发现的租户。</div>`;
+    return;
+  }
+
+  refs.tenantDirectoryList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dense-row">
+          <div class="row-head">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(item.name)}</div>
+              <div class="row-subtitle">${escapeHtml(item.slug)} · 创建者 ${escapeHtml(item.owner_display_name)}</div>
+            </div>
+            <div class="row-side">
+              <span class="status-chip ${relationClass(item.relation)}">${relationLabel(item.relation)}</span>
+            </div>
+          </div>
+          <div class="row-stats">
+            <span class="stat-pill"><span>成员</span>${item.member_count}</span>
+            <span class="stat-pill"><span>创建时间</span>${formatDateTime(item.created_at)}</span>
+          </div>
+          ${
+            item.relation === "none"
+              ? `<div class="row-actions"><button type="button" class="ghost-button small" data-prefill-tenant-slug="${escapeHtml(item.slug)}">填写加入申请</button></div>`
+              : ""
+          }
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderMyRequestList(items) {
+  if (!items.length) {
+    refs.myJoinRequestList.innerHTML = `<div class="empty-state">你还没有提交过租户加入申请。</div>`;
+    return;
+  }
+
+  refs.myJoinRequestList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dense-row">
+          <div class="row-head">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(item.tenant_name)}</div>
+              <div class="row-subtitle">${escapeHtml(item.tenant_slug)} · 提交于 ${formatDateTime(item.created_at)}</div>
+            </div>
+            <div class="row-side">
+              <span class="status-chip ${requestStatusClass(item.status)}">${requestStatusLabel(item.status)}</span>
+            </div>
+          </div>
+          <div class="row-note">${escapeHtml(item.note || "未填写申请说明")}</div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderPendingApprovalList(items) {
+  if (!items.length) {
+    refs.tenantApprovalList.innerHTML = `<div class="empty-state">当前没有待你处理的加入申请。</div>`;
+    return;
+  }
+
+  refs.tenantApprovalList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="dense-row">
+          <div class="row-head">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(item.display_name || item.username)}</div>
+              <div class="row-subtitle">${escapeHtml(item.username)} · 申请加入 ${escapeHtml(item.tenant_name)} (${escapeHtml(item.tenant_slug)})</div>
+            </div>
+            <div class="row-side">
+              <span class="status-chip warn">待审批</span>
+            </div>
+          </div>
+          <div class="row-note">${escapeHtml(item.note || "未填写申请说明")}</div>
+          <div class="row-actions">
+            <button type="button" class="quick-button quick-button--approve" data-approve-request="${item.id}">同意</button>
+            <button type="button" class="quick-button quick-button--reject" data-reject-request="${item.id}">拒绝</button>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function renderMiniList(container, items, itemRenderer) {
   if (!items.length) {
     container.innerHTML = `<div class="empty-state">还没有数据，先新增一条试试。</div>`;
@@ -364,15 +529,28 @@ function productOptions(products, placeholder) {
   ].join("");
 }
 
-function applyUiState(ui) {
+function applyUiState(ui, auth) {
+  refs.authTabButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.authTab === ui.activeAuthTab);
+  });
+
+  refs.authPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.authPanel !== ui.activeAuthTab;
+  });
+
   refs.views.forEach((view) => {
     const isActive = view.dataset.view === ui.activeView;
     view.hidden = !isActive;
   });
 
   refs.viewButtons.forEach((button) => {
-    const isActive = button.dataset.viewBtn === ui.activeView;
+    const viewName = button.dataset.viewBtn;
+    const requiresTenant = viewName !== "tenants";
+    const disabled = requiresTenant && !auth?.current_tenant;
+    const isActive = viewName === ui.activeView;
     button.classList.toggle("is-active", isActive);
+    button.classList.toggle("is-disabled", disabled);
+    button.toggleAttribute("disabled", disabled);
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
 
@@ -392,6 +570,7 @@ function applyUiState(ui) {
     panel.hidden = panel.dataset.morePanel !== ui.activeMoreTab;
   });
 
+  refs.composerTrigger.hidden = !auth?.current_tenant;
   refs.composerOverlay.hidden = !ui.composerOpen;
   document.body.style.overflow = ui.composerOpen ? "hidden" : "";
 
@@ -479,6 +658,46 @@ function typeLabel(type) {
     return "调整";
   }
   return type;
+}
+
+function relationLabel(relation) {
+  if (relation === "member") {
+    return "已加入";
+  }
+  if (relation === "pending") {
+    return "待审批";
+  }
+  return "可申请";
+}
+
+function relationClass(relation) {
+  if (relation === "member") {
+    return "safe";
+  }
+  if (relation === "pending") {
+    return "warn";
+  }
+  return "info";
+}
+
+function requestStatusLabel(status) {
+  if (status === "approved") {
+    return "已同意";
+  }
+  if (status === "rejected") {
+    return "已拒绝";
+  }
+  return "待审批";
+}
+
+function requestStatusClass(status) {
+  if (status === "approved") {
+    return "safe";
+  }
+  if (status === "rejected") {
+    return "danger";
+  }
+  return "warn";
 }
 
 function shortText(text, maxLength) {

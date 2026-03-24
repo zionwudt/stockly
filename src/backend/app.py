@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,7 +12,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from jiancang.db import init_db, seed_demo_data
 from jiancang.security import SESSION_DAYS
-from jiancang.services import InventoryService, ValidationError
+from jiancang.services import InventoryService, SessionPrincipal, ValidationError
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -44,10 +45,19 @@ class JianCangHandler(BaseHTTPRequestHandler):
         try:
             payload = self._read_json_body()
 
-            if path == "/api/auth/login":
-                context, session_token = self.service.authenticate_user(payload)
+            if path == "/api/auth/register":
+                principal, session_token = self.service.register_user(payload)
                 self._send_json(
-                    self.service.get_auth_profile(context),
+                    self.service.get_auth_profile(principal),
+                    status=HTTPStatus.CREATED,
+                    cookies=[self._session_cookie(session_token)],
+                )
+                return
+
+            if path == "/api/auth/login":
+                identity, session_token = self.service.authenticate_user(payload)
+                self._send_json(
+                    self.service.get_auth_profile(identity),
                     cookies=[self._session_cookie(session_token)],
                 )
                 return
@@ -55,6 +65,47 @@ class JianCangHandler(BaseHTTPRequestHandler):
             if path == "/api/auth/logout":
                 self.service.logout_session(self._session_token())
                 self._send_json({"message": "已退出登录"}, cookies=[self._clear_session_cookie()])
+                return
+
+            if path == "/api/auth/switch-tenant":
+                principal = self._require_principal()
+                if principal is None:
+                    return
+                updated_principal = self.service.switch_current_tenant(self._session_token(), principal, payload)
+                self._send_json(self.service.get_auth_profile(updated_principal))
+                return
+
+            if path == "/api/tenants":
+                principal = self._require_principal()
+                if principal is None:
+                    return
+                result = self.service.create_tenant(principal, payload)
+                updated_principal = self.service.switch_current_tenant(
+                    self._session_token(),
+                    principal,
+                    {"tenant_id": result["tenant"]["id"]},
+                )
+                result["auth"] = self.service.get_auth_profile(updated_principal)
+                self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            if path == "/api/tenant-join-requests":
+                principal = self._require_principal()
+                if principal is None:
+                    return
+                result = self.service.create_join_request(principal, payload)
+                self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            decision_match = re.fullmatch(r"/api/tenant-join-requests/(\d+)/(approve|reject)", path)
+            if decision_match:
+                principal = self._require_principal()
+                if principal is None:
+                    return
+                request_id = int(decision_match.group(1))
+                approved = decision_match.group(2) == "approve"
+                result = self.service.review_join_request(principal, request_id, approved)
+                self._send_json(result)
                 return
 
             context = self._require_context()
@@ -90,10 +141,17 @@ class JianCangHandler(BaseHTTPRequestHandler):
     def _handle_api_get(self, path: str, query: dict[str, list[str]]) -> None:
         try:
             if path == "/api/auth/me":
-                context = self._require_context()
-                if context is None:
+                principal = self._require_principal()
+                if principal is None:
                     return
-                self._send_json(self.service.get_auth_profile(context))
+                self._send_json(self.service.get_auth_profile(principal))
+                return
+
+            if path == "/api/tenant-hub":
+                principal = self._require_principal()
+                if principal is None:
+                    return
+                self._send_json(self.service.get_tenant_hub(principal))
                 return
 
             context = self._require_context()
@@ -137,10 +195,21 @@ class JianCangHandler(BaseHTTPRequestHandler):
             return None
         return morsel.value
 
-    def _require_context(self):
-        context = self.service.get_context_for_session(self._session_token())
-        if context is None:
+    def _require_principal(self) -> SessionPrincipal | None:
+        principal = self.service.get_principal_for_session(self._session_token())
+        if principal is None:
             self._send_json({"error": "请先登录。"}, status=HTTPStatus.UNAUTHORIZED)
+            return None
+        return principal
+
+    def _require_context(self):
+        principal = self._require_principal()
+        if principal is None:
+            return None
+        try:
+            context = self.service.require_request_context(principal)
+        except ValidationError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return None
         return context
 

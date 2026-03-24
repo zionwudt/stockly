@@ -19,40 +19,78 @@ TENANTED_TABLES = [
     "stock_movements",
 ]
 
+USERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL DEFAULT '',
+    password_salt TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+TENANTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS tenants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    owner_user_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE SET NULL
+)
+"""
+
+TENANT_MEMBERSHIPS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS tenant_memberships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('owner', 'member')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tenant_id, user_id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+)
+"""
+
+TENANT_JOIN_REQUESTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS tenant_join_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+    decided_by_user_id INTEGER,
+    decided_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(decided_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+)
+"""
+
+SESSIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    tenant_id INTEGER,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+)
+"""
+
 SCHEMA_STATEMENTS = [
-    """
-    CREATE TABLE IF NOT EXISTS tenants (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        slug TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL DEFAULT 'active',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tenant_id INTEGER NOT NULL,
-        username TEXT NOT NULL,
-        display_name TEXT NOT NULL DEFAULT '',
-        password_salt TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(tenant_id, username),
-        FOREIGN KEY(tenant_id) REFERENCES tenants(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        expires_at TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    """,
+    USERS_TABLE_SQL,
+    TENANTS_TABLE_SQL,
+    TENANT_MEMBERSHIPS_TABLE_SQL,
+    TENANT_JOIN_REQUESTS_TABLE_SQL,
+    SESSIONS_TABLE_SQL,
     """
     CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,9 +164,18 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE SET NULL
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_users_tenant_username ON users(tenant_id, username)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user ON tenant_memberships(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tenant_join_requests_tenant_status ON tenant_join_requests(tenant_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_tenant_join_requests_user ON tenant_join_requests(user_id)",
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_join_requests_pending
+    ON tenant_join_requests(tenant_id, user_id)
+    WHERE status = 'pending'
+    """,
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_products_tenant_sku ON products(tenant_id, sku)",
     "CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id)",
     "CREATE INDEX IF NOT EXISTS idx_partners_tenant_type ON partners(tenant_id, partner_type)",
@@ -141,7 +188,7 @@ SCHEMA_STATEMENTS = [
 INDEX_STATEMENTS = [
     statement
     for statement in SCHEMA_STATEMENTS
-    if statement.startswith("CREATE INDEX") or statement.startswith("CREATE UNIQUE INDEX")
+    if statement.lstrip().startswith("CREATE INDEX") or statement.lstrip().startswith("CREATE UNIQUE INDEX")
 ]
 
 TABLE_STATEMENTS = [statement for statement in SCHEMA_STATEMENTS if statement not in INDEX_STATEMENTS]
@@ -160,6 +207,7 @@ def init_db(db_path: Path) -> None:
         for statement in TABLE_STATEMENTS:
             connection.execute(statement)
         _migrate_legacy_schema(connection)
+        _migrate_identity_schema(connection)
         for statement in INDEX_STATEMENTS:
             connection.execute(statement)
         _seed_default_identity(connection)
@@ -257,6 +305,88 @@ def _migrate_legacy_schema(connection: sqlite3.Connection) -> None:
             connection.execute(f"UPDATE {table} SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0")
 
 
+def _migrate_identity_schema(connection: sqlite3.Connection) -> None:
+    if _table_exists(connection, "tenants"):
+        _ensure_column(connection, "tenants", "owner_user_id", "INTEGER")
+
+    if _table_exists(connection, "users") and _column_exists(connection, "users", "tenant_id"):
+        _migrate_users_to_global_accounts(connection)
+
+    if not _table_exists(connection, "sessions") or not _column_exists(connection, "sessions", "tenant_id"):
+        _rebuild_sessions_table(connection)
+
+
+def _migrate_users_to_global_accounts(connection: sqlite3.Connection) -> None:
+    if _table_exists(connection, "tenant_join_requests"):
+        connection.execute("DROP TABLE tenant_join_requests")
+    if _table_exists(connection, "tenant_memberships"):
+        connection.execute("DROP TABLE tenant_memberships")
+    if _table_exists(connection, "sessions"):
+        connection.execute("DROP TABLE sessions")
+
+    connection.execute("ALTER TABLE users RENAME TO users_legacy")
+    connection.execute(USERS_TABLE_SQL)
+    connection.execute(TENANT_MEMBERSHIPS_TABLE_SQL)
+    connection.execute(TENANT_JOIN_REQUESTS_TABLE_SQL)
+
+    legacy_rows = connection.execute(
+        """
+        SELECT
+            u.*,
+            t.slug AS tenant_slug
+        FROM users_legacy u
+        JOIN tenants t ON t.id = u.tenant_id
+        ORDER BY u.created_at ASC, u.id ASC
+        """
+    ).fetchall()
+    owner_old_ids: dict[int, int] = {}
+    for row in legacy_rows:
+        owner_old_ids.setdefault(int(row["tenant_id"]), int(row["id"]))
+
+    seen_usernames: set[str] = set()
+    for row in legacy_rows:
+        username = _dedupe_username(seen_usernames, str(row["username"]), str(row["tenant_slug"]))
+        seen_usernames.add(username)
+        connection.execute(
+            """
+            INSERT INTO users (username, display_name, password_salt, password_hash, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                username,
+                str(row["display_name"] or row["username"]),
+                row["password_salt"],
+                row["password_hash"],
+                int(row["is_active"]),
+                row["created_at"],
+            ),
+        )
+        new_user_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        tenant_id = int(row["tenant_id"])
+        role = "owner" if owner_old_ids[tenant_id] == int(row["id"]) else "member"
+        connection.execute(
+            """
+            INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (tenant_id, new_user_id, role, row["created_at"]),
+        )
+        if role == "owner":
+            connection.execute(
+                "UPDATE tenants SET owner_user_id = ? WHERE id = ?",
+                (new_user_id, tenant_id),
+            )
+
+    connection.execute("DROP TABLE users_legacy")
+    connection.execute(SESSIONS_TABLE_SQL)
+
+
+def _rebuild_sessions_table(connection: sqlite3.Connection) -> None:
+    if _table_exists(connection, "sessions"):
+        connection.execute("DROP TABLE sessions")
+    connection.execute(SESSIONS_TABLE_SQL)
+
+
 def _seed_default_identity(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
@@ -274,28 +404,72 @@ def _seed_default_identity(connection: sqlite3.Connection) -> None:
                 (tenant_id,),
             )
 
-    user_count = connection.execute(
-        "SELECT COUNT(*) FROM users WHERE tenant_id = ?",
-        (tenant_id,),
-    ).fetchone()[0]
-    if user_count:
-        return
+    admin_row = connection.execute(
+        "SELECT id FROM users WHERE username = ? LIMIT 1",
+        (DEFAULT_ADMIN_USERNAME,),
+    ).fetchone()
+    if admin_row is None:
+        salt = generate_salt()
+        connection.execute(
+            """
+            INSERT INTO users (username, display_name, password_salt, password_hash, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+            """,
+            (
+                DEFAULT_ADMIN_USERNAME,
+                "系统管理员",
+                salt,
+                hash_password(DEFAULT_ADMIN_PASSWORD, salt),
+                db_now(),
+            ),
+        )
+        admin_user_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+    else:
+        admin_user_id = int(admin_row["id"])
 
-    salt = generate_salt()
-    connection.execute(
+    membership_row = connection.execute(
         """
-        INSERT INTO users (tenant_id, username, display_name, password_salt, password_hash, is_active, created_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?)
+        SELECT id
+        FROM tenant_memberships
+        WHERE tenant_id = ? AND user_id = ?
+        LIMIT 1
         """,
-        (
-            tenant_id,
-            DEFAULT_ADMIN_USERNAME,
-            "系统管理员",
-            salt,
-            hash_password(DEFAULT_ADMIN_PASSWORD, salt),
-            db_now(),
-        ),
+        (tenant_id, admin_user_id),
+    ).fetchone()
+    if membership_row is None:
+        connection.execute(
+            """
+            INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
+            VALUES (?, ?, 'owner', ?)
+            """,
+            (tenant_id, admin_user_id, db_now()),
+        )
+    else:
+        connection.execute(
+            """
+            UPDATE tenant_memberships
+            SET role = 'owner'
+            WHERE tenant_id = ? AND user_id = ?
+            """,
+            (tenant_id, admin_user_id),
+        )
+
+    connection.execute(
+        "UPDATE tenants SET owner_user_id = COALESCE(owner_user_id, ?) WHERE id = ?",
+        (admin_user_id, tenant_id),
     )
+
+
+def _dedupe_username(seen_usernames: set[str], username: str, tenant_slug: str) -> str:
+    base = username.strip().lower()
+    if not base:
+        base = f"user_{tenant_slug}"
+    candidate = base
+    suffix = 2
+    while candidate in seen_usernames:
+        candidate = f"{base}_{tenant_slug}_{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _get_default_tenant_id(connection: sqlite3.Connection) -> int:

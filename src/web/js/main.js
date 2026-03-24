@@ -3,6 +3,7 @@ import { appendLineItem, removeLineItem, renderApp, showToast } from "./ui.js";
 
 const state = {
   auth: null,
+  tenantHub: null,
   summary: null,
   products: [],
   suppliers: [],
@@ -11,6 +12,7 @@ const state = {
   movements: [],
   documents: [],
   ui: {
+    activeAuthTab: "login",
     activeView: "inventory",
     inventoryQuery: "",
     inventoryFilter: "all",
@@ -26,6 +28,7 @@ const refs = {
   authScreen: document.querySelector("#auth-screen"),
   appShell: document.querySelector("#app-shell"),
   loginForm: document.querySelector("#login-form"),
+  registerForm: document.querySelector("#register-form"),
   refreshButton: document.querySelector("#refresh-button"),
   logoutButton: document.querySelector("#logout-button"),
   inventorySearch: document.querySelector("#inventory-search"),
@@ -36,18 +39,21 @@ const refs = {
   purchaseForm: document.querySelector("#purchase-form"),
   saleForm: document.querySelector("#sale-form"),
   adjustmentForm: document.querySelector("#adjustment-form"),
+  tenantCreateForm: document.querySelector("#tenant-create-form"),
+  tenantJoinForm: document.querySelector("#tenant-join-form"),
 };
 
 async function boot() {
   bindEvents();
-  refs.loginForm.elements.tenant_slug.value = "demo";
   refs.loginForm.elements.username.value = "admin";
+  refs.loginForm.elements.tenant_slug.value = "demo";
   await restoreSession();
 }
 
 function bindEvents() {
   refs.loginForm.addEventListener("submit", handleLoginSubmit);
-  refs.refreshButton.addEventListener("click", () => refreshData("数据已同步。"));
+  refs.registerForm.addEventListener("submit", handleRegisterSubmit);
+  refs.refreshButton.addEventListener("click", () => refreshApp("数据已同步。"));
   refs.logoutButton.addEventListener("click", handleLogout);
   refs.composerTrigger.addEventListener("click", () => openComposer("purchase"));
   refs.inventorySearch.addEventListener("input", (event) => {
@@ -55,6 +61,8 @@ function bindEvents() {
     renderApp(state);
   });
 
+  refs.tenantCreateForm.addEventListener("submit", handleTenantCreateSubmit);
+  refs.tenantJoinForm.addEventListener("submit", handleTenantJoinSubmit);
   refs.productForm.addEventListener("submit", handleProductSubmit);
   refs.supplierForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "supplier"));
   refs.customerForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "customer"));
@@ -63,6 +71,13 @@ function bindEvents() {
   refs.adjustmentForm.addEventListener("submit", handleAdjustmentSubmit);
 
   document.addEventListener("click", (event) => {
+    const authTab = event.target.closest("[data-auth-tab]");
+    if (authTab) {
+      state.ui.activeAuthTab = authTab.dataset.authTab;
+      renderApp(state);
+      return;
+    }
+
     const addButton = event.target.closest("[data-add-row]");
     if (addButton) {
       appendLineItem(addButton.dataset.addRow, state.products);
@@ -72,6 +87,34 @@ function bindEvents() {
     const removeButton = event.target.closest("[data-remove-row]");
     if (removeButton) {
       removeLineItem(removeButton);
+      return;
+    }
+
+    const switchTenantButton = event.target.closest("[data-switch-tenant]");
+    if (switchTenantButton) {
+      void handleTenantSwitch(Number(switchTenantButton.dataset.switchTenant));
+      return;
+    }
+
+    const prefillTenantButton = event.target.closest("[data-prefill-tenant-slug]");
+    if (prefillTenantButton) {
+      refs.tenantJoinForm.elements.tenant_slug.value = prefillTenantButton.dataset.prefillTenantSlug || "";
+      refs.tenantJoinForm.elements.tenant_slug.focus();
+      state.ui.activeView = "tenants";
+      renderApp(state);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const approveButton = event.target.closest("[data-approve-request]");
+    if (approveButton) {
+      void handleJoinRequestDecision(Number(approveButton.dataset.approveRequest), true);
+      return;
+    }
+
+    const rejectButton = event.target.closest("[data-reject-request]");
+    if (rejectButton) {
+      void handleJoinRequestDecision(Number(rejectButton.dataset.rejectRequest), false);
       return;
     }
 
@@ -119,7 +162,6 @@ function bindEvents() {
     const quickDoc = event.target.closest("[data-quick-doc]");
     if (quickDoc) {
       openComposer(quickDoc.dataset.quickDoc, Number(quickDoc.dataset.productId));
-      return;
     }
   });
 
@@ -137,28 +179,29 @@ function bindEvents() {
   });
 }
 
-async function refreshData(successMessage = "") {
+async function restoreSession() {
   try {
-    const [summary, products, suppliers, customers, stock, movements, documents] = await Promise.all([
-      api.getSummary(),
-      api.getProducts(),
-      api.getSuppliers(),
-      api.getCustomers(),
-      api.getStock(),
-      api.getMovements(),
-      api.getDocuments(),
-    ]);
-
-    state.summary = summary;
-    state.products = products;
-    state.suppliers = suppliers;
-    state.customers = customers;
-    state.stock = stock;
-    state.movements = movements;
-    state.documents = documents;
+    await loadAppState();
+    showAppShell();
     renderApp(state);
     applyComposerPrefill();
+    showToast("已恢复登录状态。");
+  } catch (error) {
+    if (error.status === 401) {
+      showAuthScreen();
+      return;
+    }
+    showAuthScreen();
+    showToast(error.message || "会话恢复失败。");
+  }
+}
 
+async function refreshApp(successMessage = "") {
+  try {
+    await loadAppState();
+    showAppShell();
+    renderApp(state);
+    applyComposerPrefill();
     if (successMessage) {
       showToast(successMessage);
     }
@@ -171,35 +214,65 @@ async function refreshData(successMessage = "") {
   }
 }
 
-async function restoreSession() {
-  try {
-    const auth = await api.getMe();
-    state.auth = auth;
-    showAppShell();
-    await refreshData("已恢复登录状态。");
-  } catch (error) {
-    if (error.status === 401) {
-      showAuthScreen();
-      return;
-    }
-    showAuthScreen();
-    showToast(error.message || "会话恢复失败。");
+async function loadAppState() {
+  const [auth, tenantHub] = await Promise.all([api.getMe(), api.getTenantHub()]);
+  state.auth = auth;
+  state.tenantHub = tenantHub;
+
+  if (auth.current_tenant) {
+    await loadWorkspaceData();
+  } else {
+    clearDomainState();
   }
+
+  normalizeUiState();
+}
+
+async function loadWorkspaceData() {
+  const [summary, products, suppliers, customers, stock, movements, documents] = await Promise.all([
+    api.getSummary(),
+    api.getProducts(),
+    api.getSuppliers(),
+    api.getCustomers(),
+    api.getStock(),
+    api.getMovements(),
+    api.getDocuments(),
+  ]);
+
+  state.summary = summary;
+  state.products = products;
+  state.suppliers = suppliers;
+  state.customers = customers;
+  state.stock = stock;
+  state.movements = movements;
+  state.documents = documents;
 }
 
 async function handleLoginSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const payload = formToObject(form);
 
   try {
-    state.auth = await api.login(payload);
-    clearDomainState();
+    await api.login(formToObject(form));
     form.elements.password.value = "";
     showAppShell();
-    await refreshData("登录成功。");
+    await refreshApp("登录成功。");
   } catch (error) {
     showToast(error.message || "登录失败。");
+  }
+}
+
+async function handleRegisterSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    await api.register(formToObject(form));
+    form.reset();
+    showAppShell();
+    await refreshApp("注册成功，请先创建或加入一个租户。");
+  } catch (error) {
+    showToast(error.message || "注册失败。");
   }
 }
 
@@ -209,20 +282,66 @@ async function handleLogout() {
   } catch (error) {
     showToast(error.message || "退出登录失败。");
   } finally {
-    state.auth = null;
-    clearDomainState();
+    clearAllState();
     closeComposerSheet();
     showAuthScreen();
+  }
+}
+
+async function handleTenantCreateSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    await api.createTenant(formToObject(form));
+    form.reset();
+    state.ui.activeView = "inventory";
+    await refreshApp("租户已创建，并已切换到新租户。");
+  } catch (error) {
+    showToast(error.message || "创建租户失败。");
+  }
+}
+
+async function handleTenantJoinSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    await api.createJoinRequest(formToObject(form));
+    form.elements.note.value = "";
+    await refreshApp("已提交加入申请，请等待租户创建者审批。");
+  } catch (error) {
+    showToast(error.message || "提交加入申请失败。");
+  }
+}
+
+async function handleTenantSwitch(tenantId) {
+  try {
+    await api.switchTenant({ tenant_id: tenantId });
+    if (state.ui.activeView === "tenants") {
+      state.ui.activeView = "inventory";
+    }
+    await refreshApp("已切换租户。");
+  } catch (error) {
+    showToast(error.message || "切换租户失败。");
+  }
+}
+
+async function handleJoinRequestDecision(requestId, approved) {
+  try {
+    const result = approved ? await api.approveJoinRequest(requestId) : await api.rejectJoinRequest(requestId);
+    await refreshApp(result.message || (approved ? "已同意申请。" : "已拒绝申请。"));
+  } catch (error) {
+    showToast(error.message || "处理申请失败。");
   }
 }
 
 async function handleProductSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const payload = formToObject(form);
 
   try {
-    await api.createProduct(payload);
+    await api.createProduct(formToObject(form));
     form.reset();
     form.elements.unit.value = "件";
     form.elements.purchase_price.value = "0";
@@ -230,7 +349,7 @@ async function handleProductSubmit(event) {
     form.elements.safety_stock.value = "0";
     state.ui.activeView = "more";
     state.ui.activeMoreTab = "products";
-    await refreshData("商品已创建。");
+    await refreshApp("商品已创建。");
   } catch (error) {
     showToast(error.message || "新增商品失败。");
   }
@@ -247,7 +366,7 @@ async function handlePartnerSubmit(event, partnerType) {
     form.reset();
     state.ui.activeView = "more";
     state.ui.activeMoreTab = partnerType === "supplier" ? "suppliers" : "customers";
-    await refreshData(partnerType === "supplier" ? "供应商已创建。" : "客户已创建。");
+    await refreshApp(partnerType === "supplier" ? "供应商已创建。" : "客户已创建。");
   } catch (error) {
     showToast(error.message || "保存往来单位失败。");
   }
@@ -272,7 +391,7 @@ async function handleDocumentSubmit(event, docType) {
     closeComposerSheet();
     state.ui.activeView = "documents";
     state.ui.documentFilter = docType;
-    await refreshData(docType === "purchase" ? "采购入库完成。" : "销售出库完成。");
+    await refreshApp(docType === "purchase" ? "采购入库完成。" : "销售出库完成。");
   } catch (error) {
     showToast(error.message || "提交单据失败。");
   }
@@ -294,19 +413,29 @@ async function handleAdjustmentSubmit(event) {
     closeComposerSheet();
     state.ui.activeView = "documents";
     state.ui.documentFilter = "adjustment";
-    await refreshData("库存调整完成。");
+    await refreshApp("库存调整完成。");
   } catch (error) {
     showToast(error.message || "库存调整失败。");
   }
 }
 
 function setActiveView(viewName) {
+  if (viewName !== "tenants" && !state.auth?.current_tenant) {
+    state.ui.activeView = "tenants";
+    renderApp(state);
+    showToast("请先创建租户或切换到一个已加入的租户。");
+    return;
+  }
   state.ui.activeView = viewName;
   renderApp(state);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function openComposer(type = "purchase", productId = null) {
+  if (!state.auth?.current_tenant) {
+    showToast("请先切换到一个租户后再新建单据。");
+    return;
+  }
   state.ui.composerOpen = true;
   state.ui.activeComposerType = type;
   state.ui.composerPrefillProductId = productId || null;
@@ -323,8 +452,7 @@ function closeComposerSheet(resetPrefill = true) {
 }
 
 async function handleUnauthorized() {
-  state.auth = null;
-  clearDomainState();
+  clearAllState();
   closeComposerSheet();
   showAuthScreen();
   showToast("登录已失效，请重新登录。");
@@ -348,6 +476,20 @@ function clearDomainState() {
   state.stock = [];
   state.movements = [];
   state.documents = [];
+}
+
+function clearAllState() {
+  state.auth = null;
+  state.tenantHub = null;
+  clearDomainState();
+}
+
+function normalizeUiState() {
+  if (!state.auth?.current_tenant) {
+    state.ui.activeView = "tenants";
+    state.ui.composerOpen = false;
+    state.ui.composerPrefillProductId = null;
+  }
 }
 
 function applyComposerPrefill() {

@@ -240,6 +240,12 @@ p {
   align-content: center;
 }
 
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .auth-card__head {
   display: grid;
   gap: 10px;
@@ -701,9 +707,19 @@ textarea:focus {
   background: var(--success-soft);
 }
 
+.status-chip.info {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
 .status-chip.warn {
   color: var(--warning);
   background: var(--warning-soft);
+}
+
+.status-chip.danger {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .type-chip.purchase {
@@ -753,6 +769,16 @@ textarea:focus {
   font-weight: 800;
 }
 
+.quick-button--approve {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.quick-button--reject {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .row-actions .quick-button:nth-child(1) {
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -768,10 +794,24 @@ textarea:focus {
   color: var(--warning);
 }
 
+.row-actions .quick-button--approve {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.row-actions .quick-button--reject {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .panel-stack {
   display: grid;
   gap: 16px;
   margin-top: 14px;
+}
+
+.tenant-panel-stack + .tenant-panel-stack {
+  margin-top: 20px;
 }
 
 .form-card,
@@ -886,7 +926,7 @@ textarea:focus {
   transform: translateX(-50%);
   width: min(560px, calc(100vw - 24px));
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   padding: 10px;
   border-radius: 28px;
@@ -941,6 +981,16 @@ textarea:focus {
 .tab-button.is-active {
   color: var(--accent-strong);
   background: linear-gradient(135deg, rgba(47, 111, 237, 0.12), rgba(47, 111, 237, 0.06));
+}
+
+.tab-button.is-disabled {
+  opacity: 0.48;
+  transform: none;
+  pointer-events: none;
+}
+
+.tab-button.is-disabled .tab-icon {
+  background: rgba(22, 45, 86, 0.04);
 }
 
 .tab-button.is-active .tab-icon {

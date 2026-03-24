@@ -21,6 +21,13 @@ export const api = {
   getMe() {
     return request("/api/auth/me");
   },
+  register(payload) {
+    return request("/api/auth/register", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    });
+  },
   login(payload) {
     return request("/api/auth/login", {
       method: "POST",
@@ -30,6 +37,44 @@ export const api = {
   },
   logout() {
     return request("/api/auth/logout", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({}),
+    });
+  },
+  switchTenant(payload) {
+    return request("/api/auth/switch-tenant", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    });
+  },
+  getTenantHub() {
+    return request("/api/tenant-hub");
+  },
+  createTenant(payload) {
+    return request("/api/tenants", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    });
+  },
+  createJoinRequest(payload) {
+    return request("/api/tenant-join-requests", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    });
+  },
+  approveJoinRequest(requestId) {
+    return request(`/api/tenant-join-requests/${requestId}/approve`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({}),
+    });
+  },
+  rejectJoinRequest(requestId) {
+    return request(`/api/tenant-join-requests/${requestId}/reject`, {
       method: "POST",
       headers: JSON_HEADERS,
       body: JSON.stringify({}),
