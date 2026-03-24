@@ -14,8 +14,8 @@ from jiancang.security import SESSION_DAYS
 from jiancang.services import InventoryService, ValidationError
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-STATIC_DIR = ROOT_DIR / "web"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+STATIC_DIR = ROOT_DIR / "src" / "web"
 DEFAULT_DB_PATH = ROOT_DIR / "data" / "jiancang.db"
 SESSION_COOKIE_NAME = "jiancang_session"
 

@@ -129,6 +129,12 @@ function bindEvents() {
       syncLineItemPrice(productSelect);
     }
   });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.ui.composerOpen) {
+      closeComposerSheet();
+    }
+  });
 }
 
 async function refreshData(successMessage = "") {
@@ -297,6 +303,7 @@ async function handleAdjustmentSubmit(event) {
 function setActiveView(viewName) {
   state.ui.activeView = viewName;
   renderApp(state);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function openComposer(type = "purchase", productId = null) {

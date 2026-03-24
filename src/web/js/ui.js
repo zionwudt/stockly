@@ -31,10 +31,10 @@ const refs = {
 };
 
 const metricLabels = [
-  ["stock_value", "库存额", "采购价"],
-  ["product_count", "SKU", "商品数"],
-  ["alert_count", "预警", "待处理"],
-  ["document_total", "单据", "采销累计"],
+  ["stock_value", "库存货值", "按采购价估算"],
+  ["product_count", "商品数", "当前建档 SKU"],
+  ["alert_count", "预警商品", "建议优先补货"],
+  ["document_total", "最近单据", "采购与销售累计"],
 ];
 
 export function renderApp(state) {
@@ -85,7 +85,7 @@ export function showToast(message, duration = 2200) {
 
 function renderStatusSummary(metrics) {
   refs.statusSummary.textContent =
-    `库存 ${formatShortCurrency(metrics.stock_value ?? 0)} · SKU ${metrics.product_count ?? 0} · 预警 ${metrics.alert_count ?? 0}`;
+    `当前库存货值 ${formatShortCurrency(metrics.stock_value ?? 0)}，共有 ${metrics.product_count ?? 0} 个 SKU，${metrics.alert_count ?? 0} 个商品需要关注。`;
 }
 
 function renderIdentity(auth) {
@@ -94,7 +94,7 @@ function renderIdentity(auth) {
     refs.userBadge.textContent = "未登录";
     return;
   }
-  refs.tenantBadge.textContent = `${auth.tenant.name} (${auth.tenant.slug})`;
+  refs.tenantBadge.textContent = `${auth.tenant.name} · ${auth.tenant.slug}`;
   refs.userBadge.textContent = `${auth.user.display_name} · ${auth.user.username}`;
 }
 
@@ -107,9 +107,8 @@ function renderMetrics(metrics) {
     .map(([key, label, note]) => {
       const rawValue = metricData[key] ?? 0;
       const value = key === "stock_value" ? formatShortCurrency(rawValue) : rawValue;
-      const accentClass = key === "stock_value" || key === "alert_count" ? "accent-card" : "";
       return `
-        <article class="metric-card ${accentClass}">
+        <article class="metric-card metric-card--${key}">
           <p class="metric-label">${label}</p>
           <div class="metric-value">${value}</div>
           <p class="metric-note">${note}</p>
@@ -121,7 +120,17 @@ function renderMetrics(metrics) {
 
 function renderAlerts(alerts) {
   if (!alerts.length) {
-    refs.alertList.innerHTML = "";
+    refs.alertList.innerHTML = `
+      <article class="dense-row">
+        <div class="row-head">
+          <div class="row-main">
+            <div class="row-title">库存状态稳定</div>
+            <div class="row-subtitle">当前没有低于安全库存的商品，可以继续关注最近流水和新开单据。</div>
+          </div>
+          <span class="status-chip safe">正常</span>
+        </div>
+      </article>
+    `;
     return;
   }
 
@@ -147,10 +156,10 @@ function renderStock(stock, query, filter) {
   refs.inventorySearch.value = query;
   const filtered = filterStock(stock, query, filter);
   const alertCount = filtered.filter((item) => item.in_alert).length;
-  refs.inventorySummary.textContent = `${filtered.length} 条 · 预警 ${alertCount}`;
+  refs.inventorySummary.textContent = `共 ${filtered.length} 条，预警 ${alertCount} 条`;
 
   if (!filtered.length) {
-    refs.stockList.innerHTML = `<div class="empty-state">没有匹配的库存记录。</div>`;
+    refs.stockList.innerHTML = `<div class="empty-state">没有找到符合当前筛选条件的库存记录。</div>`;
     return;
   }
 
@@ -185,7 +194,7 @@ function renderStock(stock, query, filter) {
 
 function renderMovements(items) {
   if (!items.length) {
-    refs.movementList.innerHTML = `<div class="empty-state">暂无库存流水。</div>`;
+    refs.movementList.innerHTML = `<div class="empty-state">暂无库存流水，完成一笔采购、销售或调整后会显示在这里。</div>`;
     return;
   }
 
@@ -212,7 +221,7 @@ function renderMovements(items) {
 
 function renderDocuments(items, filter) {
   const filtered = filterDocuments(items, filter);
-  refs.documentSummary.textContent = `${filtered.length} 条`;
+  refs.documentSummary.textContent = `最近 ${filtered.length} 条`;
 
   if (!filtered.length) {
     refs.documentList.innerHTML = `<div class="empty-state">当前筛选下没有单据。</div>`;
@@ -245,7 +254,7 @@ function renderDocuments(items, filter) {
 
 function renderMiniList(container, items, itemRenderer) {
   if (!items.length) {
-    container.innerHTML = `<div class="empty-state">还没有数据。</div>`;
+    container.innerHTML = `<div class="empty-state">还没有数据，先新增一条试试。</div>`;
     return;
   }
   container.innerHTML = items.map(itemRenderer).join("");
@@ -277,7 +286,7 @@ function renderPartnerRow(item) {
     <article class="dense-row">
       <div class="row-title">${escapeHtml(item.name)}</div>
       <div class="row-subtitle">${escapeHtml(item.contact || "未填写联系人")} · ${escapeHtml(item.phone || "未填写电话")}</div>
-      <div class="row-note">${escapeHtml(item.note || "无备注")}</div>
+      <div class="row-note">${escapeHtml(item.note || "暂未补充备注")}</div>
     </article>
   `;
 }

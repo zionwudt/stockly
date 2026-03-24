@@ -19,11 +19,11 @@ test = [
 jiancang = "app:main"
 
 [tool.setuptools]
-package-dir = {"" = "backend"}
+package-dir = {"" = "src/backend"}
 py-modules = ["app"]
 
 [tool.setuptools.packages.find]
-where = ["backend"]
+where = ["src/backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

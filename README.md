@@ -56,18 +56,19 @@ MVP 只覆盖最核心的“进、销、存”主流程:
 ## 项目结构
 
 ```text
-backend/
-  app.py                  # HTTP 服务入口，负责 API 和静态文件托管
-  jiancang/
-    db.py                 # SQLite 建表与演示数据
-    services.py           # 领域服务，处理库存业务规则
-web/
-  index.html              # 单页面入口
-  styles.css              # 页面样式
-  js/
-    api.js                # API 请求封装
-    ui.js                 # 页面渲染与交互 UI
-    main.js               # 应用启动与表单提交
+src/
+  backend/
+    app.py                # HTTP 服务入口，负责 API 和静态文件托管
+    jiancang/
+      db.py               # SQLite 建表与演示数据
+      services.py         # 领域服务，处理库存业务规则
+  web/
+    index.html            # 单页面入口
+    styles.css            # 页面样式
+    js/
+      api.js              # API 请求封装
+      ui.js               # 页面渲染与交互 UI
+      main.js             # 应用启动与表单提交
 ```
 
 ## 数据模型
@@ -133,13 +134,13 @@ pytest
 然后启动服务:
 
 ```bash
-python backend/app.py
+jiancang
 ```
 
 或者:
 
 ```bash
-jiancang
+python src/backend/app.py
 ```
 
 默认启动地址:
@@ -151,7 +152,7 @@ http://127.0.0.1:8000
 也可以指定端口和数据库路径:
 
 ```bash
-python backend/app.py --port 9000 --db ./data/dev.db
+python src/backend/app.py --port 9000 --db ./data/dev.db
 ```
 
 首次启动会自动:

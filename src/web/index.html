@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>简仓 · 移动进销存</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <section id="auth-screen" class="auth-screen">
+      <div class="auth-layout">
+        <section class="auth-showcase surface-card">
+          <div class="auth-showcase__head">
+            <p class="sheet-kicker">JianCang Stock Workspace</p>
+            <h1>简仓</h1>
+            <p class="auth-lead">
+              面向小团队的轻量进销存工作台，重点把高频操作做得更直接，让用户打开页面就像打开一款顺手的 app。
+            </p>
+          </div>
+
+          <div class="auth-feature-grid">
+            <article class="auth-feature">
+              <strong>库存一眼看清</strong>
+              <span>货值、SKU、预警优先展示，判断更快。</span>
+            </article>
+            <article class="auth-feature">
+              <strong>单据入口更近</strong>
+              <span>采购、销售、调整集中在一个浮层里完成。</span>
+            </article>
+            <article class="auth-feature">
+              <strong>更像移动应用</strong>
+              <span>信息层次清楚，适合国内用户的浏览习惯。</span>
+            </article>
+          </div>
+
+          <div class="auth-note-card">
+            <p class="auth-note-card__title">适合当前 MVP 的使用方式</p>
+            <div class="auth-note-list">
+              <span class="auth-note-pill">先处理库存与预警</span>
+              <span class="auth-note-pill">再做开单与核对</span>
+              <span class="auth-note-pill">低频维护统一放在更多</span>
+            </div>
+          </div>
+        </section>
+
+        <form id="login-form" class="auth-card surface-card">
+          <div class="auth-card__head">
+            <p class="sheet-kicker">租户登录</p>
+            <h2>进入工作台</h2>
+            <p class="auth-copy">先选择租户，再用账号密码进入当前租户的数据空间。</p>
+          </div>
+
+          <label>
+            <span>租户标识</span>
+            <input name="tenant_slug" type="text" placeholder="例如 demo" autocomplete="organization" required />
+          </label>
+          <label>
+            <span>账号</span>
+            <input name="username" type="text" placeholder="例如 admin" autocomplete="username" required />
+          </label>
+          <label>
+            <span>密码</span>
+            <input name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required />
+          </label>
+
+          <button type="submit" class="primary-button wide-button">登录</button>
+          <p class="auth-hint">演示账号：租户 demo，账号 admin，密码 admin123456</p>
+        </form>
+      </div>
+    </section>
+
+    <div id="app-shell" class="app-shell" hidden>
+      <header class="topbar surface-card">
+        <div class="topbar-main">
+          <p class="sheet-kicker">Inventory Workspace</p>
+          <div class="brand-row">
+            <div class="brand-copy-group">
+              <h1>简仓</h1>
+              <p class="brand-copy">把库存、单据和基础资料放进一个清爽直接的移动工作台。</p>
+            </div>
+            <span id="tenant-badge" class="brand-tag">进销存作业台</span>
+          </div>
+          <div class="status-strip">
+            <p id="status-summary" class="status-summary">正在加载库存与单据状态...</p>
+            <span id="user-badge" class="user-badge">未登录</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="refresh-button" class="ghost-button top-button" type="button">同步数据</button>
+          <button id="logout-button" class="ghost-button top-button" type="button">退出登录</button>
+        </div>
+      </header>
+
+      <section class="surface-card metrics-shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-eyebrow">今日概览</p>
+            <h2>核心指标</h2>
+          </div>
+          <p class="section-brief">优先呈现影响决策的数据，方便移动端快速判断当前库存状态。</p>
+        </div>
+        <div id="metrics-grid" class="metrics-grid"></div>
+      </section>
+
+      <main class="view-stack">
+        <section class="app-view inventory-view" data-view="inventory">
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">库存工作台</p>
+                <h2>库存</h2>
+                <p class="head-note">先看风险，再做搜索和处理，这是最常用的一屏。</p>
+              </div>
+              <span id="inventory-summary" class="head-hint"></span>
+            </div>
+
+            <label class="search-field">
+              <span class="search-icon" aria-hidden="true"></span>
+              <input id="inventory-search" type="search" placeholder="搜索商品 / SKU / 分类" />
+            </label>
+
+            <div class="filter-row" role="tablist" aria-label="库存筛选">
+              <button type="button" class="filter-pill" data-stock-filter="all">全部</button>
+              <button type="button" class="filter-pill" data-stock-filter="warn">仅预警</button>
+              <button type="button" class="filter-pill" data-stock-filter="instock">有库存</button>
+            </div>
+
+            <div id="alert-list" class="dense-list alert-list"></div>
+            <div id="stock-list" class="dense-list"></div>
+          </section>
+
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">最近动态</p>
+                <h2>最近流水</h2>
+                <p class="head-note">方便核对最近的出入库动作与调整记录。</p>
+              </div>
+              <span class="head-hint">最近 30 条</span>
+            </div>
+            <div id="movement-list" class="dense-list"></div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="documents" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">单据中心</p>
+                <h2>单据</h2>
+                <p class="head-note">查看最近的采购、销售和调整记录，适合移动端快速核对。</p>
+              </div>
+              <span id="document-summary" class="head-hint"></span>
+            </div>
+
+            <div class="filter-row" role="tablist" aria-label="单据筛选">
+              <button type="button" class="filter-pill" data-document-filter="all">全部</button>
+              <button type="button" class="filter-pill" data-document-filter="purchase">采购</button>
+              <button type="button" class="filter-pill" data-document-filter="sale">销售</button>
+              <button type="button" class="filter-pill" data-document-filter="adjustment">调整</button>
+            </div>
+
+            <div id="document-list" class="dense-list"></div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="more" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">基础资料</p>
+                <h2>更多</h2>
+                <p class="head-note">把低频维护集中到这里，主工作台只保留高频操作。</p>
+              </div>
+            </div>
+
+            <div class="filter-row" role="tablist" aria-label="配置分类">
+              <button type="button" class="filter-pill" data-more-tab="products">商品</button>
+              <button type="button" class="filter-pill" data-more-tab="suppliers">供应商</button>
+              <button type="button" class="filter-pill" data-more-tab="customers">客户</button>
+            </div>
+
+            <section class="more-panel" data-more-panel="products">
+              <div class="panel-stack">
+                <form id="product-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增商品</h3>
+                    <p>建立基础商品档案，后续采购和销售都会复用这里的数据。</p>
+                  </div>
+
+                  <div class="two-col">
+                    <label>
+                      <span>SKU</span>
+                      <input name="sku" type="text" placeholder="JC-001" required />
+                    </label>
+                    <label>
+                      <span>商品名称</span>
+                      <input name="name" type="text" placeholder="挂耳咖啡" required />
+                    </label>
+                  </div>
+
+                  <div class="three-col">
+                    <label>
+                      <span>分类</span>
+                      <input name="category" type="text" placeholder="饮品" />
+                    </label>
+                    <label>
+                      <span>单位</span>
+                      <input name="unit" type="text" value="件" />
+                    </label>
+                    <label>
+                      <span>安全库存</span>
+                      <input name="safety_stock" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                  </div>
+
+                  <div class="two-col">
+                    <label>
+                      <span>采购价</span>
+                      <input name="purchase_price" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                    <label>
+                      <span>销售价</span>
+                      <input name="sale_price" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                  </div>
+
+                  <button type="submit" class="primary-button wide-button">保存商品</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有商品</h3>
+                    <p>支持快速查看库存和售价，方便录入时顺手核对。</p>
+                  </div>
+                  <div id="product-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+
+            <section class="more-panel" data-more-panel="suppliers" hidden>
+              <div class="panel-stack">
+                <form id="supplier-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增供应商</h3>
+                    <p>把联系人、电话和备注集中维护，采购入库时可直接选择。</p>
+                  </div>
+
+                  <label>
+                    <span>供应商名称</span>
+                    <input name="name" type="text" placeholder="供应商名称" required />
+                  </label>
+
+                  <div class="two-col">
+                    <label>
+                      <span>联系人</span>
+                      <input name="contact" type="text" placeholder="联系人" />
+                    </label>
+                    <label>
+                      <span>电话</span>
+                      <input name="phone" type="text" placeholder="联系电话" />
+                    </label>
+                  </div>
+
+                  <label>
+                    <span>备注</span>
+                    <input name="note" type="text" placeholder="账期、供货特点" />
+                  </label>
+
+                  <button type="submit" class="secondary-button wide-button">保存供应商</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有供应商</h3>
+                    <p>用于快速核对联系人、电话和合作备注。</p>
+                  </div>
+                  <div id="supplier-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+
+            <section class="more-panel" data-more-panel="customers" hidden>
+              <div class="panel-stack">
+                <form id="customer-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增客户</h3>
+                    <p>维护常用客户资料，销售出库时可以更快完成录单。</p>
+                  </div>
+
+                  <label>
+                    <span>客户名称</span>
+                    <input name="name" type="text" placeholder="客户名称" required />
+                  </label>
+
+                  <div class="two-col">
+                    <label>
+                      <span>联系人</span>
+                      <input name="contact" type="text" placeholder="联系人" />
+                    </label>
+                    <label>
+                      <span>电话</span>
+                      <input name="phone" type="text" placeholder="联系电话" />
+                    </label>
+                  </div>
+
+                  <label>
+                    <span>备注</span>
+                    <input name="note" type="text" placeholder="渠道、结算方式" />
+                  </label>
+
+                  <button type="submit" class="secondary-button wide-button">保存客户</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有客户</h3>
+                    <p>销售时直接选择，减少反复输入。</p>
+                  </div>
+                  <div id="customer-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+          </section>
+        </section>
+      </main>
+
+      <button id="composer-trigger" class="composer-trigger" type="button">
+        <span class="composer-trigger__label">新建单据</span>
+        <span class="composer-trigger__hint">采购 / 销售 / 调整</span>
+      </button>
+
+      <nav class="tabbar" aria-label="主导航">
+        <button type="button" class="tab-button" data-view-btn="inventory">
+          <span class="tab-icon">库</span>
+          <span class="tab-copy">
+            <strong>库存</strong>
+            <small>查询与预警</small>
+          </span>
+        </button>
+        <button type="button" class="tab-button" data-view-btn="documents">
+          <span class="tab-icon">单</span>
+          <span class="tab-copy">
+            <strong>单据</strong>
+            <small>最近记录</small>
+          </span>
+        </button>
+        <button type="button" class="tab-button" data-view-btn="more">
+          <span class="tab-icon">管</span>
+          <span class="tab-copy">
+            <strong>更多</strong>
+            <small>基础资料</small>
+          </span>
+        </button>
+      </nav>
+    </div>
+
+    <div id="composer-overlay" class="composer-overlay" hidden>
+      <div class="composer-backdrop" data-close-composer></div>
+      <section class="composer-sheet">
+        <div class="composer-grabber" aria-hidden="true"></div>
+        <div class="composer-head">
+          <div>
+            <p class="sheet-kicker">快速开单</p>
+            <h3>新建单据</h3>
+            <p class="head-note">采购、销售和库存调整都在这里完成，适合移动端连续操作。</p>
+          </div>
+          <button type="button" class="ghost-button top-button" data-close-composer>关闭</button>
+        </div>
+
+        <div class="filter-row composer-tabs" role="tablist" aria-label="新建单据类型">
+          <button type="button" class="filter-pill" data-composer-tab="purchase">采购入库</button>
+          <button type="button" class="filter-pill" data-composer-tab="sale">销售出库</button>
+          <button type="button" class="filter-pill" data-composer-tab="adjustment">库存调整</button>
+        </div>
+
+        <section class="composer-panel" data-composer-panel="purchase">
+          <form id="purchase-form" class="compact-form">
+            <label>
+              <span>供应商</span>
+              <select name="partner_id" id="purchase-partner-select" required></select>
+            </label>
+
+            <div class="inline-head">
+              <span>商品明细</span>
+              <button type="button" class="ghost-button small" data-add-row="purchase">添加商品</button>
+            </div>
+            <div id="purchase-items" class="line-items"></div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="批次、仓位、到货说明"></textarea>
+            </label>
+
+            <button type="submit" class="primary-button wide-button">提交采购入库</button>
+          </form>
+        </section>
+
+        <section class="composer-panel" data-composer-panel="sale" hidden>
+          <form id="sale-form" class="compact-form">
+            <label>
+              <span>客户</span>
+              <select name="partner_id" id="sale-partner-select" required></select>
+            </label>
+
+            <div class="inline-head">
+              <span>商品明细</span>
+              <button type="button" class="ghost-button small" data-add-row="sale">添加商品</button>
+            </div>
+            <div id="sale-items" class="line-items"></div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="订单号、发货说明"></textarea>
+            </label>
+
+            <button type="submit" class="primary-button wide-button">提交销售出库</button>
+          </form>
+        </section>
+
+        <section class="composer-panel" data-composer-panel="adjustment" hidden>
+          <form id="adjustment-form" class="compact-form">
+            <label>
+              <span>商品</span>
+              <select name="product_id" id="adjustment-product-select" required></select>
+            </label>
+
+            <div class="two-col">
+              <label>
+                <span>调整数量</span>
+                <input name="quantity_delta" type="number" step="0.01" placeholder="正数盘盈，负数盘亏" required />
+              </label>
+              <label>
+                <span>原因</span>
+                <input name="reason" type="text" placeholder="盘点 / 损耗 / 报废" required />
+              </label>
+            </div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="补充说明"></textarea>
+            </label>
+
+            <button type="submit" class="secondary-button wide-button">提交库存调整</button>
+          </form>
+        </section>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>
