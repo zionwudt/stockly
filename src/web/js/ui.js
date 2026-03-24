@@ -6,6 +6,15 @@ const refs = {
   metricsGrid: document.querySelector("#metrics-grid"),
   inventorySummary: document.querySelector("#inventory-summary"),
   documentSummary: document.querySelector("#document-summary"),
+  statsRangeSummary: document.querySelector("#stats-range-summary"),
+  statsOverviewGrid: document.querySelector("#stats-overview-grid"),
+  statsTrendChart: document.querySelector("#stats-trend-chart"),
+  statsTrendCaption: document.querySelector("#stats-trend-caption"),
+  statsMixChart: document.querySelector("#stats-mix-chart"),
+  statsTopProducts: document.querySelector("#stats-top-products"),
+  statsTopCaption: document.querySelector("#stats-top-caption"),
+  statsStartInput: document.querySelector("#stats-start-date"),
+  statsEndInput: document.querySelector("#stats-end-date"),
   tenantSummary: document.querySelector("#tenant-summary"),
   alertList: document.querySelector("#alert-list"),
   stockList: document.querySelector("#stock-list"),
@@ -31,6 +40,7 @@ const refs = {
   viewButtons: Array.from(document.querySelectorAll("[data-view-btn]")),
   stockFilterButtons: Array.from(document.querySelectorAll("[data-stock-filter]")),
   documentFilterButtons: Array.from(document.querySelectorAll("[data-document-filter]")),
+  statsPresetButtons: Array.from(document.querySelectorAll("[data-stats-preset]")),
   moreTabButtons: Array.from(document.querySelectorAll("[data-more-tab]")),
   morePanels: Array.from(document.querySelectorAll("[data-more-panel]")),
   composerOverlay: document.querySelector("#composer-overlay"),
@@ -54,6 +64,7 @@ export function renderApp(state) {
   renderStock(state.stock || [], state.ui?.inventoryQuery || "", state.ui?.inventoryFilter || "all");
   renderMovements(state.movements || []);
   renderDocuments(state.documents || [], state.ui?.documentFilter || "all");
+  renderStatistics(state.statistics || null, state.ui || {}, Boolean(state.auth?.current_tenant));
   renderTenantHub(state.tenantHub || null, state.auth || null);
   renderMiniList(refs.productList, state.products || [], (item) => renderProductRow(item, state.stock || []));
   renderMiniList(refs.supplierList, state.suppliers || [], renderPartnerRow);
@@ -282,6 +293,43 @@ function renderDocuments(items, filter) {
       `,
     )
     .join("");
+}
+
+function renderStatistics(statistics, ui, hasCurrentTenant) {
+  refs.statsStartInput.value = ui.statsStartDate || "";
+  refs.statsEndInput.value = ui.statsEndDate || "";
+
+  if (!hasCurrentTenant) {
+    refs.statsRangeSummary.textContent = "选择租户后可查看";
+    refs.statsOverviewGrid.innerHTML = "";
+    refs.statsTrendCaption.textContent = "按月汇总";
+    refs.statsTrendChart.innerHTML = "";
+    refs.statsMixChart.innerHTML = "";
+    refs.statsTopCaption.textContent = "按区间活跃度排序";
+    refs.statsTopProducts.innerHTML = "";
+    return;
+  }
+
+  if (!statistics) {
+    refs.statsRangeSummary.textContent = `${ui.statsStartDate || "-"} 至 ${ui.statsEndDate || "-"}`;
+    refs.statsOverviewGrid.innerHTML = `<div class="empty-state">统计数据加载中，请稍候。</div>`;
+    refs.statsTrendCaption.textContent = "按月汇总";
+    refs.statsTrendChart.innerHTML = `<div class="empty-state">正在整理趋势数据。</div>`;
+    refs.statsMixChart.innerHTML = `<div class="empty-state">正在整理业务构成。</div>`;
+    refs.statsTopProducts.innerHTML = `<div class="empty-state">正在计算商品活跃度。</div>`;
+    return;
+  }
+
+  refs.statsRangeSummary.textContent = `${statistics.range.label} · ${statistics.overview.document_count} 张单据`;
+  refs.statsOverviewGrid.innerHTML = buildStatisticsOverview(statistics.overview || {});
+  refs.statsTrendCaption.textContent = `共 ${statistics.range.month_count} 个月，按月汇总`;
+  refs.statsTopCaption.textContent = statistics.top_products?.length
+    ? `区间内最活跃 ${statistics.top_products.length} 个商品`
+    : "所选区间内暂无活跃商品";
+
+  renderStatisticsTrend(statistics.monthly || []);
+  renderStatisticsMix(statistics.mix || []);
+  renderStatisticsTopProducts(statistics.top_products || []);
 }
 
 function renderTenantHub(hub, auth) {
@@ -562,6 +610,10 @@ function applyUiState(ui, auth) {
     button.classList.toggle("is-active", button.dataset.documentFilter === ui.documentFilter);
   });
 
+  refs.statsPresetButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.statsPreset === ui.statsPreset);
+  });
+
   refs.moreTabButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.moreTab === ui.activeMoreTab);
   });
@@ -610,8 +662,220 @@ function filterDocuments(items, filter) {
   return items.filter((item) => item.doc_type === filter);
 }
 
+function buildStatisticsOverview(overview) {
+  const cards = [
+    {
+      key: "net_amount",
+      label: "交易净额",
+      value: formatSignedCurrency(overview.net_amount || 0),
+      note: "销售额减去采购额",
+    },
+    {
+      key: "sale_amount",
+      label: "销售额",
+      value: formatCurrency(overview.sale_amount || 0),
+      note: `${overview.sale_docs || 0} 张销售单`,
+    },
+    {
+      key: "purchase_amount",
+      label: "采购额",
+      value: formatCurrency(overview.purchase_amount || 0),
+      note: `${overview.purchase_docs || 0} 张采购单`,
+    },
+    {
+      key: "document_count",
+      label: "单据数",
+      value: String(overview.document_count || 0),
+      note: `调整 ${overview.adjustment_docs || 0} 张`,
+    },
+    {
+      key: "active_days",
+      label: "活跃天数",
+      value: String(overview.active_days || 0),
+      note: `销售 ${formatQuantity(overview.sale_quantity || 0)} / 采购 ${formatQuantity(overview.purchase_quantity || 0)}`,
+    },
+  ];
+
+  return cards
+    .map(
+      (item) => `
+        <article class="stats-card stats-card--${item.key}">
+          <p class="stats-card__label">${item.label}</p>
+          <div class="stats-card__value">${item.value}</div>
+          <p class="stats-card__note">${item.note}</p>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderStatisticsTrend(items) {
+  const hasData = items.some(
+    (item) =>
+      Number(item.sale_amount || 0) > 0 ||
+      Number(item.purchase_amount || 0) > 0 ||
+      Number(item.document_count || 0) > 0,
+  );
+
+  if (!hasData) {
+    refs.statsTrendChart.innerHTML = `<div class="empty-state">所选时间范围内还没有可展示的月度数据。</div>`;
+    return;
+  }
+
+  const chartWidth = Math.max(540, items.length * 92);
+  const chartHeight = 280;
+  const margin = { top: 24, right: 18, bottom: 46, left: 56 };
+  const plotWidth = chartWidth - margin.left - margin.right;
+  const plotHeight = chartHeight - margin.top - margin.bottom;
+  const maxValue = Math.max(
+    1,
+    ...items.flatMap((item) => [Number(item.sale_amount || 0), Number(item.purchase_amount || 0)]),
+  );
+  const step = plotWidth / items.length;
+  const groupWidth = Math.min(46, step * 0.7);
+  const barGap = 6;
+  const barWidth = Math.max(10, (groupWidth - barGap) / 2);
+  const baseline = margin.top + plotHeight;
+  const gridFractions = [1, 0.75, 0.5, 0.25, 0];
+
+  const gridLines = gridFractions
+    .map((fraction) => {
+      const y = margin.top + plotHeight * (1 - fraction);
+      return `
+        <line x1="${margin.left}" y1="${y}" x2="${chartWidth - margin.right}" y2="${y}" class="stats-grid-line"></line>
+        <text x="${margin.left - 10}" y="${y + 4}" class="stats-grid-label">${escapeHtml(formatShortCurrency(maxValue * fraction))}</text>
+      `;
+    })
+    .join("");
+
+  const bars = items
+    .map((item, index) => {
+      const x = margin.left + step * index + (step - groupWidth) / 2;
+      const purchaseHeight = (Number(item.purchase_amount || 0) / maxValue) * plotHeight;
+      const saleHeight = (Number(item.sale_amount || 0) / maxValue) * plotHeight;
+      const labelX = margin.left + step * index + step / 2;
+      return `
+        <g>
+          <rect
+            x="${x}"
+            y="${baseline - purchaseHeight}"
+            width="${barWidth}"
+            height="${purchaseHeight}"
+            rx="9"
+            class="stats-bar stats-bar--purchase"
+          ></rect>
+          <rect
+            x="${x + barWidth + barGap}"
+            y="${baseline - saleHeight}"
+            width="${barWidth}"
+            height="${saleHeight}"
+            rx="9"
+            class="stats-bar stats-bar--sale"
+          ></rect>
+          <text x="${labelX}" y="${chartHeight - 14}" text-anchor="middle" class="stats-axis-label">${escapeHtml(formatMonthLabel(item.month))}</text>
+        </g>
+      `;
+    })
+    .join("");
+
+  const totals = items.reduce(
+    (accumulator, item) => {
+      accumulator.sale += Number(item.sale_amount || 0);
+      accumulator.purchase += Number(item.purchase_amount || 0);
+      return accumulator;
+    },
+    { sale: 0, purchase: 0 },
+  );
+
+  refs.statsTrendChart.innerHTML = `
+    <div class="stats-legend">
+      <span class="stats-legend__item"><i class="stats-swatch stats-swatch--purchase"></i>采购 ${formatCurrency(totals.purchase)}</span>
+      <span class="stats-legend__item"><i class="stats-swatch stats-swatch--sale"></i>销售 ${formatCurrency(totals.sale)}</span>
+    </div>
+    <div class="stats-chart-scroll">
+      <svg class="stats-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="月度采购与销售趋势图">
+        ${gridLines}
+        ${bars}
+      </svg>
+    </div>
+  `;
+}
+
+function renderStatisticsMix(items) {
+  const maxCount = Math.max(1, ...items.map((item) => Number(item.count || 0)));
+  const hasData = items.some((item) => Number(item.count || 0) > 0 || Number(item.quantity || 0) > 0);
+
+  if (!hasData) {
+    refs.statsMixChart.innerHTML = `<div class="empty-state">所选时间范围内没有业务构成数据。</div>`;
+    return;
+  }
+
+  refs.statsMixChart.innerHTML = items
+    .map((item) => {
+      const width = Number(item.count || 0) > 0 ? Math.max((Number(item.count || 0) / maxCount) * 100, 10) : 0;
+      return `
+        <article class="mix-row mix-row--${escapeHtml(item.type)}">
+          <div class="mix-row__head">
+            <strong>${escapeHtml(item.label)}</strong>
+            <span>${item.count} 单 · ${item.type === "adjustment" ? formatQuantity(item.quantity || 0) : formatCurrency(item.amount || 0)}</span>
+          </div>
+          <div class="mix-row__bar">
+            <span style="width: ${width}%"></span>
+          </div>
+          <div class="mix-row__foot">数量 ${formatQuantity(item.quantity || 0)}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderStatisticsTopProducts(items) {
+  if (!items.length) {
+    refs.statsTopProducts.innerHTML = `<div class="empty-state">当前时间范围内还没有活跃商品记录。</div>`;
+    return;
+  }
+
+  const maxActivity = Math.max(1, ...items.map((item) => Number(item.activity_amount || 0)));
+  refs.statsTopProducts.innerHTML = items
+    .map((item, index) => {
+      const barWidth = Math.max((Number(item.activity_amount || 0) / maxActivity) * 100, 8);
+      return `
+        <article class="dense-row stats-rank-row">
+          <div class="stats-rank-row__index">${String(index + 1).padStart(2, "0")}</div>
+          <div class="stats-rank-row__body">
+            <div class="row-head">
+              <div class="row-main">
+                <div class="row-title">${escapeHtml(item.name)}</div>
+                <div class="row-subtitle">${escapeHtml(item.sku)} · ${escapeHtml(item.category || "未分类")} · ${escapeHtml(item.unit || "件")}</div>
+              </div>
+              <div class="row-side">
+                <strong class="stats-rank-row__figure">${formatCurrency(item.activity_amount || 0)}</strong>
+                <span class="mini-text">区间流水</span>
+              </div>
+            </div>
+            <div class="stats-rank-row__bar">
+              <span style="width: ${barWidth}%"></span>
+            </div>
+            <div class="row-stats">
+              <span class="stat-pill"><span>销售</span>${formatQuantity(item.sale_quantity || 0)} ${escapeHtml(item.unit || "件")}</span>
+              <span class="stat-pill"><span>采购</span>${formatQuantity(item.purchase_quantity || 0)} ${escapeHtml(item.unit || "件")}</span>
+              <span class="stat-pill"><span>调整</span>${signedQuantity(item.adjustment_quantity || 0)} ${escapeHtml(item.unit || "件")}</span>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function formatCurrency(value) {
   return `¥${Number(value || 0).toFixed(2)}`;
+}
+
+function formatSignedCurrency(value) {
+  const amount = Number(value || 0);
+  const prefix = amount > 0 ? "+" : amount < 0 ? "-" : "";
+  return `${prefix}¥${Math.abs(amount).toFixed(2)}`;
 }
 
 function formatShortCurrency(value) {
@@ -698,6 +962,17 @@ function requestStatusClass(status) {
     return "danger";
   }
   return "warn";
+}
+
+function formatMonthLabel(value) {
+  if (!value) {
+    return "-";
+  }
+  const parts = String(value).split("-");
+  if (parts.length !== 2) {
+    return value;
+  }
+  return `${Number(parts[1])}月`;
 }
 
 function shortText(text, maxLength) {

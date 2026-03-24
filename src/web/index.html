@@ -221,6 +221,68 @@
           </section>
         </section>
 
+        <section class="app-view" data-view="stats" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">经营趋势</p>
+                <h2>统计</h2>
+                <p class="head-note">按月查看采购、销售和库存调整变化，支持快捷切换统计时间。</p>
+              </div>
+              <span id="stats-range-summary" class="head-hint"></span>
+            </div>
+
+            <div class="stats-toolbar">
+              <div class="filter-row stats-preset-row" role="tablist" aria-label="统计时间快捷选择">
+                <button type="button" class="filter-pill" data-stats-preset="thisMonth">本月</button>
+                <button type="button" class="filter-pill" data-stats-preset="last3Months">近 3 个月</button>
+                <button type="button" class="filter-pill" data-stats-preset="last6Months">近 6 个月</button>
+                <button type="button" class="filter-pill" data-stats-preset="thisYear">今年</button>
+              </div>
+
+              <form id="stats-range-form" class="stats-range-form">
+                <label>
+                  <span>开始日期</span>
+                  <input id="stats-start-date" name="start_date" type="date" required />
+                </label>
+                <label>
+                  <span>结束日期</span>
+                  <input id="stats-end-date" name="end_date" type="date" required />
+                </label>
+                <button type="submit" class="ghost-button top-button">应用时间</button>
+              </form>
+            </div>
+
+            <div id="stats-overview-grid" class="stats-overview-grid"></div>
+
+            <div class="stats-layout">
+              <section class="stats-panel">
+                <div class="inline-head">
+                  <span>月度趋势</span>
+                  <span id="stats-trend-caption">按月汇总</span>
+                </div>
+                <div id="stats-trend-chart" class="stats-chart-card"></div>
+              </section>
+
+              <section class="stats-panel">
+                <div class="inline-head">
+                  <span>业务构成</span>
+                  <span>所选区间内单据和数量</span>
+                </div>
+                <div id="stats-mix-chart" class="stats-mix-list"></div>
+              </section>
+            </div>
+
+            <section class="stats-panel stats-panel--wide">
+              <div class="inline-head">
+                <span>商品排行</span>
+                <span id="stats-top-caption">按区间活跃度排序</span>
+              </div>
+              <div id="stats-top-products" class="dense-list embedded-list"></div>
+            </section>
+          </section>
+        </section>
+
         <section class="app-view" data-view="tenants" hidden>
           <section class="surface-card section-card">
             <div class="block-head">
@@ -487,6 +549,13 @@
           <span class="tab-copy">
             <strong>单据</strong>
             <small>最近记录</small>
+          </span>
+        </button>
+        <button type="button" class="tab-button" data-view-btn="stats">
+          <span class="tab-icon">统</span>
+          <span class="tab-copy">
+            <strong>统计</strong>
+            <small>月度趋势</small>
           </span>
         </button>
         <button type="button" class="tab-button" data-view-btn="tenants">

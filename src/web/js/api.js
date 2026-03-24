@@ -122,6 +122,17 @@ export const api = {
   getDocuments() {
     return request("/api/documents?limit=60");
   },
+  getStatistics({ startDate, endDate } = {}) {
+    const params = new URLSearchParams();
+    if (startDate) {
+      params.set("start_date", startDate);
+    }
+    if (endDate) {
+      params.set("end_date", endDate);
+    }
+    const query = params.toString();
+    return request(`/api/statistics${query ? `?${query}` : ""}`);
+  },
   createPurchase(payload) {
     return request("/api/purchases", {
       method: "POST",

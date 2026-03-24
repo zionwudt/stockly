@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from jiancang.db import DEFAULT_ADMIN_USERNAME, DEFAULT_TENANT_SLUG
+from jiancang.db import DEFAULT_ADMIN_USERNAME, DEFAULT_TENANT_SLUG, get_connection
 from jiancang.services import InventoryService, ValidationError
 
 
@@ -160,3 +160,100 @@ def test_create_sale_rejects_when_stock_is_insufficient(
                 ],
             },
         )
+
+
+def test_get_statistics_returns_monthly_aggregates_for_selected_range(
+    service: InventoryService,
+    context,
+) -> None:
+    customer_id = service.list_partners(context, "customer")[0]["id"]
+    product = next(item for item in service.list_products(context) if item["sku"] == "JC-COFFEE-001")
+
+    sale_result = service.create_sale(
+        context,
+        {
+            "partner_id": customer_id,
+            "note": "monthly statistics",
+            "items": [
+                {
+                    "product_id": product["id"],
+                    "quantity": 6,
+                    "unit_price": product["sale_price"],
+                }
+            ],
+        },
+    )
+    adjustment_result = service.create_adjustment(
+        context,
+        {
+            "product_id": product["id"],
+            "quantity_delta": -2,
+            "reason": "盘点",
+            "note": "月度修正",
+        },
+    )
+
+    _set_document_timestamp(service, "PO-01-0001", "2026-01-12 09:30:00")
+    _set_document_timestamp(service, sale_result["doc_no"], "2026-02-08 14:20:00")
+    _set_document_timestamp(service, adjustment_result["doc_no"], "2026-03-06 11:00:00")
+
+    statistics = service.get_statistics(context, start_date="2026-01-01", end_date="2026-03-31")
+
+    assert statistics["range"]["month_count"] == 3
+    assert [item["month"] for item in statistics["monthly"]] == ["2026-01", "2026-02", "2026-03"]
+    assert statistics["monthly"][0]["purchase_amount"] > 0
+    assert statistics["monthly"][1]["sale_amount"] == pytest.approx(product["sale_price"] * 6)
+    assert statistics["monthly"][2]["adjustment_docs"] == 1
+    assert statistics["overview"]["document_count"] == 3
+
+
+def test_get_statistics_respects_date_filters(
+    service: InventoryService,
+    context,
+) -> None:
+    customer_id = service.list_partners(context, "customer")[0]["id"]
+    product = next(item for item in service.list_products(context) if item["sku"] == "JC-COFFEE-001")
+
+    sale_result = service.create_sale(
+        context,
+        {
+            "partner_id": customer_id,
+            "note": "range filter",
+            "items": [
+                {
+                    "product_id": product["id"],
+                    "quantity": 4,
+                    "unit_price": product["sale_price"],
+                }
+            ],
+        },
+    )
+
+    _set_document_timestamp(service, "PO-01-0001", "2026-01-12 09:30:00")
+    _set_document_timestamp(service, sale_result["doc_no"], "2026-02-08 14:20:00")
+
+    statistics = service.get_statistics(context, start_date="2026-02-01", end_date="2026-02-28")
+
+    assert statistics["overview"]["purchase_amount"] == 0
+    assert statistics["overview"]["sale_amount"] == pytest.approx(product["sale_price"] * 4)
+    assert statistics["overview"]["document_count"] == 1
+    assert len(statistics["monthly"]) == 1
+    monthly = statistics["monthly"][0]
+    assert monthly["month"] == "2026-02"
+    assert monthly["purchase_amount"] == 0
+    assert monthly["sale_amount"] == pytest.approx(product["sale_price"] * 4)
+    assert monthly["sale_docs"] == 1
+    assert monthly["sale_quantity"] == 4
+    assert monthly["document_count"] == 1
+    assert monthly["net_amount"] == pytest.approx(product["sale_price"] * 4)
+
+
+def _set_document_timestamp(service: InventoryService, doc_no: str, created_at: str) -> None:
+    with get_connection(service.db_path) as connection:
+        document_id = connection.execute(
+            "SELECT id FROM documents WHERE tenant_id = 1 AND doc_no = ?",
+            (doc_no,),
+        ).fetchone()[0]
+        connection.execute("UPDATE documents SET created_at = ? WHERE id = ?", (created_at, document_id))
+        connection.execute("UPDATE stock_movements SET created_at = ? WHERE document_id = ?", (created_at, document_id))
+        connection.commit()

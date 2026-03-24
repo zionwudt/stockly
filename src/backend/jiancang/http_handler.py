@@ -203,6 +203,12 @@ class JianCangHandler(BaseHTTPRequestHandler):
             limit = int(query.get("limit", ["50"])[0])
             doc_type = query.get("type", [""])[0] or None
             result = self.service.list_documents(context, doc_type=doc_type, limit=limit)
+        elif path == "/api/statistics":
+            result = self.service.get_statistics(
+                context,
+                start_date=query.get("start_date", [""])[0] or None,
+                end_date=query.get("end_date", [""])[0] or None,
+            )
         else:
             return False
 

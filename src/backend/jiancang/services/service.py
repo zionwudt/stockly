@@ -7,6 +7,7 @@ from .auth import AuthServiceMixin
 from .document_support import DocumentSupportMixin
 from .documents import DocumentServiceMixin
 from .inventory import InventoryQueryServiceMixin
+from .statistics import StatisticsServiceMixin
 from .tenant_queries import TenantQueryMixin
 from .tenants import TenantServiceMixin
 from .validators import ValidationMixin
@@ -21,5 +22,6 @@ class InventoryService(
     TenantServiceMixin,
     InventoryQueryServiceMixin,
     DocumentServiceMixin,
+    StatisticsServiceMixin,
 ):
     db_path: Path

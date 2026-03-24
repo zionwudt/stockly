@@ -497,6 +497,267 @@ textarea:focus {
   gap: 12px;
 }
 
+.stats-toolbar,
+.stats-layout,
+.stats-panel,
+.stats-overview-grid {
+  display: grid;
+}
+
+.stats-toolbar {
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.stats-preset-row {
+  margin-bottom: 0;
+}
+
+.stats-range-form {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+}
+
+.stats-range-form .top-button {
+  width: 100%;
+  justify-self: stretch;
+}
+
+.stats-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.stats-overview-grid > .empty-state {
+  grid-column: 1 / -1;
+}
+
+.stats-card {
+  display: grid;
+  gap: 10px;
+  min-height: 132px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.96));
+  border: 1px solid rgba(22, 45, 86, 0.08);
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-card--net_amount {
+  grid-column: 1 / -1;
+  color: #ffffff;
+  background: linear-gradient(135deg, #183a78 0%, #2f6fed 52%, #55b597 100%);
+  border-color: transparent;
+}
+
+.stats-card--document_count {
+  background: linear-gradient(135deg, rgba(247, 249, 253, 0.98), rgba(230, 240, 255, 0.92));
+}
+
+.stats-card--active_days {
+  background: linear-gradient(135deg, rgba(236, 248, 243, 0.98), rgba(255, 255, 255, 0.95));
+}
+
+.stats-card__label,
+.stats-card__note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stats-card__value {
+  font-size: clamp(28px, 5vw, 34px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.stats-card--net_amount .stats-card__label,
+.stats-card--net_amount .stats-card__note {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.stats-layout {
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.stats-panel {
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+}
+
+.stats-panel--wide {
+  margin-top: 16px;
+}
+
+.stats-chart-card {
+  display: grid;
+  gap: 12px;
+}
+
+.stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.stats-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stats-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.stats-swatch--purchase {
+  background: var(--accent);
+}
+
+.stats-swatch--sale {
+  background: var(--warning);
+}
+
+.stats-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.stats-svg {
+  width: 100%;
+  min-width: 540px;
+  height: auto;
+  display: block;
+}
+
+.stats-grid-line {
+  stroke: rgba(22, 45, 86, 0.08);
+  stroke-width: 1;
+}
+
+.stats-grid-label,
+.stats-axis-label {
+  fill: rgba(106, 122, 144, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stats-bar--purchase {
+  fill: rgba(47, 111, 237, 0.88);
+}
+
+.stats-bar--sale {
+  fill: rgba(239, 138, 38, 0.88);
+}
+
+.stats-mix-list {
+  display: grid;
+  gap: 12px;
+}
+
+.mix-row {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(248, 250, 253, 0.96), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(22, 45, 86, 0.08);
+}
+
+.mix-row__head,
+.mix-row__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mix-row__head strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.mix-row__bar,
+.stats-rank-row__bar {
+  position: relative;
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(22, 45, 86, 0.08);
+}
+
+.mix-row__bar span,
+.stats-rank-row__bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+}
+
+.mix-row--sale .mix-row__bar span {
+  background: linear-gradient(90deg, rgba(239, 138, 38, 0.96), rgba(255, 187, 110, 0.96));
+}
+
+.mix-row--purchase .mix-row__bar span {
+  background: linear-gradient(90deg, rgba(47, 111, 237, 0.96), rgba(121, 164, 255, 0.96));
+}
+
+.mix-row--adjustment .mix-row__bar span {
+  background: linear-gradient(90deg, rgba(21, 150, 107, 0.96), rgba(114, 205, 173, 0.96));
+}
+
+.stats-rank-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.stats-rank-row__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(47, 111, 237, 0.12), rgba(47, 111, 237, 0.04));
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.stats-rank-row__body {
+  display: grid;
+  gap: 12px;
+}
+
+.stats-rank-row__figure {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.stats-rank-row__bar span {
+  background: linear-gradient(90deg, rgba(47, 111, 237, 0.96), rgba(21, 150, 107, 0.9));
+}
+
 .metric-card {
   position: relative;
   overflow: hidden;
@@ -926,7 +1187,7 @@ textarea:focus {
   transform: translateX(-50%);
   width: min(560px, calc(100vw - 24px));
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   padding: 10px;
   border-radius: 28px;
@@ -1179,6 +1440,14 @@ textarea:focus {
     text-align: center;
   }
 
+  .stats-range-form {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-rank-row {
+    grid-template-columns: 1fr;
+  }
+
   .tab-copy small {
     display: none;
   }
@@ -1202,6 +1471,24 @@ textarea:focus {
 
   .metric-card--stock_value {
     grid-column: span 2;
+  }
+
+  .stats-range-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .stats-overview-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .stats-card--net_amount {
+    grid-column: span 2;
+  }
+
+  .stats-layout {
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
+    align-items: start;
   }
 
   .inventory-view {

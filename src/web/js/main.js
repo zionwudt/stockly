@@ -5,6 +5,7 @@ const state = {
   auth: null,
   tenantHub: null,
   summary: null,
+  statistics: null,
   products: [],
   suppliers: [],
   customers: [],
@@ -17,6 +18,9 @@ const state = {
     inventoryQuery: "",
     inventoryFilter: "all",
     documentFilter: "all",
+    statsPreset: "last6Months",
+    statsStartDate: "",
+    statsEndDate: "",
     activeMoreTab: "products",
     composerOpen: false,
     activeComposerType: "purchase",
@@ -32,6 +36,9 @@ const refs = {
   refreshButton: document.querySelector("#refresh-button"),
   logoutButton: document.querySelector("#logout-button"),
   inventorySearch: document.querySelector("#inventory-search"),
+  statsRangeForm: document.querySelector("#stats-range-form"),
+  statsStartDate: document.querySelector("#stats-start-date"),
+  statsEndDate: document.querySelector("#stats-end-date"),
   composerTrigger: document.querySelector("#composer-trigger"),
   productForm: document.querySelector("#product-form"),
   supplierForm: document.querySelector("#supplier-form"),
@@ -60,6 +67,7 @@ function bindEvents() {
     state.ui.inventoryQuery = event.currentTarget.value.trim();
     renderApp(state);
   });
+  refs.statsRangeForm.addEventListener("submit", handleStatisticsRangeSubmit);
 
   refs.tenantCreateForm.addEventListener("submit", handleTenantCreateSubmit);
   refs.tenantJoinForm.addEventListener("submit", handleTenantJoinSubmit);
@@ -121,6 +129,12 @@ function bindEvents() {
     const viewButton = event.target.closest("[data-view-btn]");
     if (viewButton) {
       setActiveView(viewButton.dataset.viewBtn);
+      return;
+    }
+
+    const statsPreset = event.target.closest("[data-stats-preset]");
+    if (statsPreset) {
+      void handleStatisticsPreset(statsPreset.dataset.statsPreset);
       return;
     }
 
@@ -218,6 +232,7 @@ async function loadAppState() {
   const [auth, tenantHub] = await Promise.all([api.getMe(), api.getTenantHub()]);
   state.auth = auth;
   state.tenantHub = tenantHub;
+  ensureStatisticsRange();
 
   if (auth.current_tenant) {
     await loadWorkspaceData();
@@ -229,7 +244,8 @@ async function loadAppState() {
 }
 
 async function loadWorkspaceData() {
-  const [summary, products, suppliers, customers, stock, movements, documents] = await Promise.all([
+  ensureStatisticsRange();
+  const [summary, products, suppliers, customers, stock, movements, documents, statistics] = await Promise.all([
     api.getSummary(),
     api.getProducts(),
     api.getSuppliers(),
@@ -237,9 +253,14 @@ async function loadWorkspaceData() {
     api.getStock(),
     api.getMovements(),
     api.getDocuments(),
+    api.getStatistics({
+      startDate: state.ui.statsStartDate,
+      endDate: state.ui.statsEndDate,
+    }),
   ]);
 
   state.summary = summary;
+  state.statistics = statistics;
   state.products = products;
   state.suppliers = suppliers;
   state.customers = customers;
@@ -419,6 +440,43 @@ async function handleAdjustmentSubmit(event) {
   }
 }
 
+async function handleStatisticsPreset(preset) {
+  if (!state.auth?.current_tenant) {
+    setActiveView("tenants");
+    return;
+  }
+
+  const range = buildStatisticsRange(preset);
+  state.ui.statsPreset = preset;
+  state.ui.statsStartDate = range.startDate;
+  state.ui.statsEndDate = range.endDate;
+  state.ui.activeView = "stats";
+  renderApp(state);
+  await refreshStatistics("统计区间已更新。");
+}
+
+async function handleStatisticsRangeSubmit(event) {
+  event.preventDefault();
+  const startDate = refs.statsStartDate.value;
+  const endDate = refs.statsEndDate.value;
+
+  if (!startDate || !endDate) {
+    showToast("请选择开始和结束日期。");
+    return;
+  }
+  if (startDate > endDate) {
+    showToast("开始日期不能晚于结束日期。");
+    return;
+  }
+
+  state.ui.statsStartDate = startDate;
+  state.ui.statsEndDate = endDate;
+  state.ui.statsPreset = detectStatisticsPreset(startDate, endDate);
+  state.ui.activeView = "stats";
+  renderApp(state);
+  await refreshStatistics("统计区间已更新。");
+}
+
 function setActiveView(viewName) {
   if (viewName !== "tenants" && !state.auth?.current_tenant) {
     state.ui.activeView = "tenants";
@@ -470,6 +528,7 @@ function showAuthScreen() {
 
 function clearDomainState() {
   state.summary = null;
+  state.statistics = null;
   state.products = [];
   state.suppliers = [];
   state.customers = [];
@@ -485,10 +544,30 @@ function clearAllState() {
 }
 
 function normalizeUiState() {
+  ensureStatisticsRange();
   if (!state.auth?.current_tenant) {
     state.ui.activeView = "tenants";
     state.ui.composerOpen = false;
     state.ui.composerPrefillProductId = null;
+  }
+}
+
+async function refreshStatistics(successMessage = "") {
+  try {
+    state.statistics = await api.getStatistics({
+      startDate: state.ui.statsStartDate,
+      endDate: state.ui.statsEndDate,
+    });
+    renderApp(state);
+    if (successMessage) {
+      showToast(successMessage);
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      await handleUnauthorized();
+      return;
+    }
+    showToast(error.message || "统计加载失败。");
   }
 }
 
@@ -553,6 +632,52 @@ function syncLineItemPrice(select) {
   const kind = row.dataset.kind;
   const suggestedPrice = kind === "purchase" ? Number(product.purchase_price || 0) : Number(product.sale_price || 0);
   priceInput.value = suggestedPrice.toFixed(2);
+}
+
+function ensureStatisticsRange() {
+  if (state.ui.statsStartDate && state.ui.statsEndDate) {
+    return;
+  }
+  const range = buildStatisticsRange(state.ui.statsPreset || "last6Months");
+  state.ui.statsPreset = state.ui.statsPreset || "last6Months";
+  state.ui.statsStartDate = range.startDate;
+  state.ui.statsEndDate = range.endDate;
+}
+
+function buildStatisticsRange(preset) {
+  const today = new Date();
+  let startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  if (preset === "last3Months") {
+    startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  } else if (preset === "last6Months") {
+    startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  } else if (preset === "thisYear") {
+    startDate = new Date(today.getFullYear(), 0, 1);
+  }
+
+  return {
+    startDate: toDateInputValue(startDate),
+    endDate: toDateInputValue(today),
+  };
+}
+
+function detectStatisticsPreset(startDate, endDate) {
+  const presets = ["thisMonth", "last3Months", "last6Months", "thisYear"];
+  for (const preset of presets) {
+    const range = buildStatisticsRange(preset);
+    if (range.startDate === startDate && range.endDate === endDate) {
+      return preset;
+    }
+  }
+  return "custom";
+}
+
+function toDateInputValue(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 boot();
