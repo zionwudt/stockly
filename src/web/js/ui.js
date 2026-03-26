@@ -594,8 +594,8 @@ function applyUiState(ui, auth) {
   refs.viewButtons.forEach((button) => {
     const viewName = button.dataset.viewBtn;
     const requiresTenant = viewName !== "tenants";
-    const disabled = requiresTenant && !auth?.current_tenant;
-    const isActive = viewName === ui.activeView;
+    const disabled = !auth || (requiresTenant && !auth.current_tenant);
+    const isActive = Boolean(auth) && viewName === ui.activeView;
     button.classList.toggle("is-active", isActive);
     button.classList.toggle("is-disabled", disabled);
     button.toggleAttribute("disabled", disabled);
@@ -761,7 +761,7 @@ function renderStatisticsTrend(items) {
             y="${baseline - purchaseHeight}"
             width="${barWidth}"
             height="${purchaseHeight}"
-            rx="9"
+            rx="4"
             class="stats-bar stats-bar--purchase"
           ></rect>
           <rect
@@ -769,7 +769,7 @@ function renderStatisticsTrend(items) {
             y="${baseline - saleHeight}"
             width="${barWidth}"
             height="${saleHeight}"
-            rx="9"
+            rx="4"
             class="stats-bar stats-bar--sale"
           ></rect>
           <text x="${labelX}" y="${chartHeight - 14}" text-anchor="middle" class="stats-axis-label">${escapeHtml(formatMonthLabel(item.month))}</text>

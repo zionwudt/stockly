@@ -23,6 +23,24 @@ def test_authenticate_user_creates_reusable_session(service: InventoryService) -
     assert service.get_auth_profile(context)["tenant"]["slug"] == DEFAULT_TENANT_SLUG
 
 
+def test_authenticate_user_without_tenant_selects_no_current_tenant(service: InventoryService) -> None:
+    principal, session_token = service.authenticate_user(
+        {
+            "username": DEFAULT_ADMIN_USERNAME,
+            "password": "admin123456",
+        }
+    )
+
+    session_principal = service.get_principal_for_session(session_token)
+    profile = service.get_auth_profile(principal)
+
+    assert principal.tenant_id is None
+    assert session_principal is not None
+    assert session_principal.tenant_id is None
+    assert profile["current_tenant"] is None
+    assert any(item["slug"] == DEFAULT_TENANT_SLUG for item in profile["available_tenants"])
+
+
 def test_register_user_can_create_tenant_and_switch_into_it(service: InventoryService) -> None:
     principal, session_token = service.register_user(
         {

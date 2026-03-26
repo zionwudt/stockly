@@ -233,7 +233,7 @@ class AuthServiceMixin:
             if tenant_row is None:
                 raise ValidationError("当前账号尚未加入该租户，或租户不可用。")
             return tenant_row
-        return self._first_membership_row(connection, user_id)
+        return None
 
     def _resolve_session_tenant(
         self,

@@ -31,6 +31,7 @@ const state = {
 const refs = {
   authScreen: document.querySelector("#auth-screen"),
   appShell: document.querySelector("#app-shell"),
+  tabbar: document.querySelector("#app-tabbar"),
   loginForm: document.querySelector("#login-form"),
   registerForm: document.querySelector("#register-form"),
   refreshButton: document.querySelector("#refresh-button"),
@@ -51,10 +52,34 @@ const refs = {
 };
 
 async function boot() {
+  bindViewportOffset();
   bindEvents();
+  renderApp(state);
   refs.loginForm.elements.username.value = "admin";
-  refs.loginForm.elements.tenant_slug.value = "demo";
   await restoreSession();
+}
+
+function bindViewportOffset() {
+  const update = () => {
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      document.documentElement.style.setProperty("--viewport-offset-bottom", "0px");
+      return;
+    }
+
+    const bottomOffset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    document.documentElement.style.setProperty("--viewport-offset-bottom", `${Math.round(bottomOffset)}px`);
+  };
+
+  update();
+  window.addEventListener("resize", update, { passive: true });
+
+  if (!window.visualViewport) {
+    return;
+  }
+
+  window.visualViewport.addEventListener("resize", update, { passive: true });
+  window.visualViewport.addEventListener("scroll", update, { passive: true });
 }
 
 function bindEvents() {
@@ -277,7 +302,7 @@ async function handleLoginSubmit(event) {
     await api.login(formToObject(form));
     form.elements.password.value = "";
     showAppShell();
-    await refreshApp("登录成功。");
+    await refreshApp("登录成功，请先选择或创建租户。");
   } catch (error) {
     showToast(error.message || "登录失败。");
   }
@@ -519,11 +544,13 @@ async function handleUnauthorized() {
 function showAppShell() {
   refs.authScreen.hidden = true;
   refs.appShell.hidden = false;
+  refs.tabbar.hidden = false;
 }
 
 function showAuthScreen() {
   refs.appShell.hidden = true;
   refs.authScreen.hidden = false;
+  refs.tabbar.hidden = true;
 }
 
 function clearDomainState() {
