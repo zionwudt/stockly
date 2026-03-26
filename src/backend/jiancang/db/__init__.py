@@ -6,7 +6,7 @@ from .constants import (
     DEFAULT_TENANT_SLUG,
 )
 from .migrations import init_db
-from .seed import seed_demo_data
+from .seed import seed_initial_data
 
 __all__ = [
     "DEFAULT_ADMIN_PASSWORD",
@@ -15,5 +15,5 @@ __all__ = [
     "DEFAULT_TENANT_SLUG",
     "get_connection",
     "init_db",
-    "seed_demo_data",
+    "seed_initial_data",
 ]

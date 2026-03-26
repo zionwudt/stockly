@@ -5,7 +5,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from jiancang.http_handler import build_handler
-from jiancang.db import init_db, seed_demo_data
+from jiancang.db import init_db, seed_initial_data
 from jiancang.services import InventoryService
 
 
@@ -16,7 +16,7 @@ DEFAULT_DB_PATH = ROOT_DIR / "data" / "jiancang.db"
 
 def run_server(host: str, port: int, db_path: Path) -> None:
     init_db(db_path)
-    seed_demo_data(db_path)
+    seed_initial_data(db_path)
     service = InventoryService(db_path=db_path)
     handler = build_handler(service, STATIC_DIR)
     server = ThreadingHTTPServer((host, port), handler)

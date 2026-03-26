@@ -60,7 +60,7 @@ src/
   backend/
     app.py                # HTTP 服务入口，负责 API 和静态文件托管
     jiancang/
-      db.py               # SQLite 建表与演示数据
+      db.py               # SQLite 建表与初始化数据
       services.py         # 领域服务，处理库存业务规则
   web/
     index.html            # 单页面入口
@@ -158,7 +158,7 @@ python src/backend/app.py --port 9000 --db ./data/dev.db
 首次启动会自动:
 
 - 创建 SQLite 表
-- 写入一批演示商品和演示供应商/客户
+- 写入一批初始化商品和供应商/客户
 - 生成一张初始化采购入库单，便于直接查看界面效果
 
 ## 当前业务规则

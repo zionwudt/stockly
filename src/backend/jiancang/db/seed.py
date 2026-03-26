@@ -6,7 +6,7 @@ from .connection import get_connection
 from .migrations import _get_default_tenant_id
 
 
-def seed_demo_data(db_path: Path) -> None:
+def seed_initial_data(db_path: Path) -> None:
     with get_connection(db_path) as connection:
         tenant_id = _get_default_tenant_id(connection)
         product_count = connection.execute(
@@ -59,7 +59,7 @@ def seed_demo_data(db_path: Path) -> None:
         connection.execute(
             """
             INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, note, total_amount)
-            VALUES (?, 'PO-01-0001', 'purchase', ?, '系统初始化演示单据', ?)
+            VALUES (?, 'PO-01-0001', 'purchase', ?, '系统初始化采购单', ?)
             """,
             (tenant_id, supplier_id, sum(row["purchase_price"] * 50 for row in product_rows)),
         )

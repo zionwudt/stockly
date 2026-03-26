@@ -129,6 +129,14 @@ def _rebuild_sessions_table(connection: sqlite3.Connection) -> None:
 def _seed_default_identity(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
+        UPDATE tenants
+        SET name = ?, slug = ?
+        WHERE id = 1 AND slug = 'demo'
+        """,
+        (DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG),
+    )
+    connection.execute(
+        """
         INSERT OR IGNORE INTO tenants (id, name, slug, status, created_at)
         VALUES (1, ?, ?, 'active', ?)
         """,

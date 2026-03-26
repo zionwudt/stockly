@@ -17,7 +17,7 @@ from jiancang.db import (  # noqa: E402
     DEFAULT_ADMIN_USERNAME,
     DEFAULT_TENANT_SLUG,
     init_db,
-    seed_demo_data,
+    seed_initial_data,
 )
 from jiancang.services import InventoryService  # noqa: E402
 
@@ -26,7 +26,7 @@ from jiancang.services import InventoryService  # noqa: E402
 def service(tmp_path: Path) -> InventoryService:
     db_path = tmp_path / "jiancang-test.db"
     init_db(db_path)
-    seed_demo_data(db_path)
+    seed_initial_data(db_path)
     return InventoryService(db_path=db_path)
 
 
