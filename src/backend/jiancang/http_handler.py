@@ -250,8 +250,12 @@ class JianCangHandler(BaseHTTPRequestHandler):
 
     def _serve_static(self, path: str) -> None:
         clean_path = unquote(path)
-        if clean_path in {"", "/"}:
+        if clean_path in {"", "/", "/auth", "/auth/"}:
             file_path = self.static_dir / "index.html"
+        elif clean_path in {"/tenant", "/tenant/"}:
+            file_path = self.static_dir / "tenant.html"
+        elif clean_path in {"/app", "/app/"}:
+            file_path = self.static_dir / "app.html"
         else:
             relative = clean_path.lstrip("/")
             file_path = (self.static_dir / relative).resolve()

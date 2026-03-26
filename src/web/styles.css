@@ -89,37 +89,23 @@ p {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: linear-gradient(180deg, #f0f3ff 0%, var(--bg) 100%);
+  background: linear-gradient(180deg, #f6f8fc 0%, #eef2f7 100%);
 }
 
 .auth-layout {
   width: 100%;
-  max-width: 560px;
+  max-width: 440px;
 }
 
-.auth-showcase,
 .auth-card {
-  padding: 32px;
-}
-
-.auth-showcase {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  justify-content: center;
-}
-
-.auth-showcase__head {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 36px 32px;
 }
 
 .auth-card h1 {
-  font-size: 36px;
+  font-size: 44px;
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  line-height: 1;
+  letter-spacing: -0.04em;
   color: var(--text);
 }
 
@@ -133,12 +119,11 @@ p {
   color: var(--primary);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 
 .auth-lead,
 .auth-copy,
-.auth-hint,
 .brand-copy,
 .head-note,
 .section-brief {
@@ -147,23 +132,6 @@ p {
   line-height: 1.6;
 }
 
-.auth-feature-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.auth-feature {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  border-radius: var(--radius);
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-}
-
-.auth-feature strong,
 .form-card__head h3,
 .list-card__head h3 {
   font-size: 14px;
@@ -171,7 +139,6 @@ p {
   line-height: 1.4;
 }
 
-.auth-feature span,
 .form-card__head p,
 .list-card__head p {
   color: var(--text-tertiary);
@@ -179,82 +146,75 @@ p {
   line-height: 1.5;
 }
 
-.auth-note-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: var(--radius);
-  background: var(--primary-bg);
-  border: 1px solid rgba(78, 124, 246, 0.12);
-}
-
-.auth-note-card__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--primary);
-}
-
-.auth-note-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.auth-note-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 /* ===== Auth Card ===== */
 .auth-card {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
   justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.07);
 }
 
 .auth-mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  background: var(--surface-soft);
-  border-radius: var(--radius);
+  background: #f3f5f8;
+  border-radius: 12px;
   padding: 3px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .auth-mode-switch .filter-pill {
-  border-radius: 7px;
+  min-height: 46px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .auth-mode-switch .filter-pill.is-active {
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .auth-card__head {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
+  text-align: center;
+}
+
+.auth-copy {
+  max-width: 18em;
+}
+
+.auth-panel .compact-form {
+  gap: 16px;
+}
+
+.auth-panel .compact-form > button {
+  margin-top: 8px;
 }
 
 .auth-card h2 {
   font-size: 22px;
   font-weight: 600;
   line-height: 1.3;
+}
+
+.auth-feedback {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(245, 108, 108, 0.08);
+  border: 1px solid rgba(245, 108, 108, 0.16);
+  color: #c74b4b;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* ===== Forms ===== */
@@ -378,6 +338,57 @@ textarea:focus {
   max-width: 1080px;
   margin: 0 auto;
   padding: 0 16px calc(80px + env(safe-area-inset-bottom) + var(--viewport-offset-bottom));
+}
+
+.tenant-page {
+  min-height: 100dvh;
+}
+
+.tenant-shell {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 16px 56px;
+}
+
+.tenant-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+}
+
+.tenant-hero__head {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tenant-hero h1 {
+  margin-top: 6px;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.tenant-hero__meta,
+.tenant-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tenant-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.tenant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .topbar,
@@ -1093,6 +1104,13 @@ textarea:focus {
   margin-top: 16px;
 }
 
+.tenant-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .form-card,
 .list-card {
   padding: 16px;
@@ -1209,7 +1227,7 @@ textarea:focus {
   right: 0;
   bottom: var(--viewport-offset-bottom);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.95);
   border-top: 1px solid var(--line);
@@ -1354,6 +1372,10 @@ textarea:focus {
   transform: translate(-50%, 0);
 }
 
+.tenant-page .toast {
+  bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
 /* ===== Hover States ===== */
 .ghost-button:hover,
 .top-button:hover {
@@ -1389,19 +1411,26 @@ textarea:focus {
     padding: 16px;
   }
 
-  .auth-showcase,
-  .auth-card {
+  .tenant-shell {
+    padding: 16px 16px 40px;
+  }
+
+  .tenant-hero {
     padding: 20px;
   }
 
-  .auth-feature-grid,
-  .two-col,
-  .three-col {
-    grid-template-columns: 1fr;
+  .auth-card {
+    padding: 28px 22px;
   }
 
-  .auth-feature-grid {
-    display: none;
+  .auth-card h1 {
+    font-size: 38px;
+  }
+
+  .two-col,
+  .three-col,
+  .tenant-grid {
+    grid-template-columns: 1fr;
   }
 
   .topbar {
@@ -1424,7 +1453,12 @@ textarea:focus {
 
   .topbar-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .tenant-hero__actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .top-button {
@@ -1444,6 +1478,10 @@ textarea:focus {
     align-items: center;
     justify-content: flex-start;
     text-align: left;
+  }
+
+  .tenant-row-side {
+    align-items: flex-start;
   }
 
   .stats-range-form {

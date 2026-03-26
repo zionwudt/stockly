@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>简仓 · 租户</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="tenant-page">
+    <div id="tenant-shell" class="tenant-shell" hidden>
+      <header class="surface-card tenant-hero">
+        <div class="tenant-hero__head">
+          <div>
+            <p class="sheet-kicker">JianCang</p>
+            <h1>租户入口</h1>
+            <p id="tenant-hero-copy" class="auth-copy">登录后先进入对应租户空间，再开始处理业务数据。</p>
+          </div>
+
+          <div class="tenant-hero__meta">
+            <span id="tenant-current-badge" class="brand-tag">未选择租户</span>
+            <span id="tenant-user-badge" class="user-badge">未登录</span>
+          </div>
+        </div>
+
+        <div class="tenant-hero__actions">
+          <button id="tenant-workspace-button" class="ghost-button top-button" type="button" hidden>进入工作台</button>
+          <button id="tenant-logout-button" class="ghost-button top-button" type="button">退出</button>
+        </div>
+      </header>
+
+      <main class="tenant-layout">
+        <section class="surface-card section-card">
+          <div class="block-head">
+            <div>
+              <p class="section-eyebrow">选择工作空间</p>
+              <h2>我的租户</h2>
+              <p id="tenant-summary-copy" class="head-note">正在加载可访问的租户列表。</p>
+            </div>
+            <span id="tenant-summary" class="head-hint"></span>
+          </div>
+
+          <div id="tenant-access-list" class="dense-list"></div>
+        </section>
+
+        <section class="tenant-grid">
+          <form id="tenant-create-form" class="compact-form form-card">
+            <div class="form-card__head">
+              <h3>新建租户</h3>
+              <p>创建后自动成为创建者，并直接进入该租户工作台。</p>
+            </div>
+
+            <label>
+              <span>租户名称</span>
+              <input name="name" type="text" placeholder="例如 华东门店" required />
+            </label>
+            <label>
+              <span>租户标识</span>
+              <input name="slug" type="text" placeholder="例如 huadong-store" required />
+            </label>
+
+            <button type="submit" class="primary-button wide-button">创建租户</button>
+          </form>
+
+          <form id="tenant-join-form" class="compact-form form-card">
+            <div class="form-card__head">
+              <h3>申请加入</h3>
+              <p>提交后由租户创建者审批，通过后即可进入对应工作区。</p>
+            </div>
+
+            <label>
+              <span>租户标识</span>
+              <input id="join-tenant-slug" name="tenant_slug" type="text" placeholder="请输入租户标识" required />
+            </label>
+            <label>
+              <span>申请说明</span>
+              <textarea name="note" rows="3" placeholder="团队身份、用途或补充说明"></textarea>
+            </label>
+
+            <button type="submit" class="secondary-button wide-button">提交申请</button>
+          </form>
+        </section>
+
+        <section class="tenant-grid">
+          <section class="list-card">
+            <div class="list-card__head">
+              <h3>可发现的租户</h3>
+              <p>可直接填入申请表，发起加入请求。</p>
+            </div>
+            <div id="tenant-directory-list" class="dense-list embedded-list"></div>
+          </section>
+
+          <section class="list-card">
+            <div class="list-card__head">
+              <h3>我的申请</h3>
+              <p>查看已提交的加入申请与处理状态。</p>
+            </div>
+            <div id="my-join-request-list" class="dense-list embedded-list"></div>
+          </section>
+        </section>
+
+        <section class="list-card">
+          <div class="list-card__head">
+            <h3>待我审批</h3>
+            <p>仅在你是租户创建者时显示需要处理的加入申请。</p>
+          </div>
+          <div id="tenant-approval-list" class="dense-list embedded-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script type="module" src="/js/tenant.js"></script>
+  </body>
+</html>

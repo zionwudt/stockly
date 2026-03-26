@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>简仓 · 工作台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app-shell" class="app-shell" hidden>
+      <header class="topbar">
+        <div class="topbar-main">
+          <div class="brand-row">
+            <div class="brand-copy-group">
+              <h1>简仓</h1>
+            </div>
+            <span id="tenant-badge" class="brand-tag">未选择租户</span>
+          </div>
+          <div class="status-strip">
+            <p id="status-summary" class="status-summary">正在加载...</p>
+            <span id="user-badge" class="user-badge">未登录</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="tenant-button" class="ghost-button top-button" type="button">租户</button>
+          <button id="refresh-button" class="ghost-button top-button" type="button">同步</button>
+          <button id="logout-button" class="ghost-button top-button" type="button">退出</button>
+        </div>
+      </header>
+
+      <section id="metrics-section" class="surface-card metrics-shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-eyebrow">今日概览</p>
+            <h2>核心指标</h2>
+          </div>
+          <p class="section-brief">当前租户数据概览</p>
+        </div>
+        <div id="metrics-grid" class="metrics-grid"></div>
+      </section>
+
+      <main class="view-stack">
+        <section class="app-view inventory-view" data-view="inventory">
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">库存工作台</p>
+                <h2>库存</h2>
+                <p class="head-note">查看库存状态与预警商品</p>
+              </div>
+              <span id="inventory-summary" class="head-hint"></span>
+            </div>
+
+            <label class="search-field">
+              <span class="search-icon" aria-hidden="true"></span>
+              <input id="inventory-search" type="search" placeholder="搜索商品 / SKU / 分类" />
+            </label>
+
+            <div class="filter-row" role="tablist" aria-label="库存筛选">
+              <button type="button" class="filter-pill" data-stock-filter="all">全部</button>
+              <button type="button" class="filter-pill" data-stock-filter="warn">仅预警</button>
+              <button type="button" class="filter-pill" data-stock-filter="instock">有库存</button>
+            </div>
+
+            <div id="alert-list" class="dense-list alert-list"></div>
+            <div id="stock-list" class="dense-list"></div>
+          </section>
+
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">最近动态</p>
+                <h2>最近流水</h2>
+                <p class="head-note">最近的出入库与调整记录</p>
+              </div>
+              <span class="head-hint">最近 30 条</span>
+            </div>
+            <div id="movement-list" class="dense-list"></div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="documents" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">单据中心</p>
+                <h2>单据</h2>
+                <p class="head-note">最近的采购、销售和调整记录</p>
+              </div>
+              <span id="document-summary" class="head-hint"></span>
+            </div>
+
+            <div class="filter-row" role="tablist" aria-label="单据筛选">
+              <button type="button" class="filter-pill" data-document-filter="all">全部</button>
+              <button type="button" class="filter-pill" data-document-filter="purchase">采购</button>
+              <button type="button" class="filter-pill" data-document-filter="sale">销售</button>
+              <button type="button" class="filter-pill" data-document-filter="adjustment">调整</button>
+            </div>
+
+            <div id="document-list" class="dense-list"></div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="stats" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">经营趋势</p>
+                <h2>统计</h2>
+                <p class="head-note">按月查看采购、销售和调整变化</p>
+              </div>
+              <span id="stats-range-summary" class="head-hint"></span>
+            </div>
+
+            <div class="stats-toolbar">
+              <div class="filter-row stats-preset-row" role="tablist" aria-label="统计时间快捷选择">
+                <button type="button" class="filter-pill" data-stats-preset="thisMonth">本月</button>
+                <button type="button" class="filter-pill" data-stats-preset="last3Months">近 3 月</button>
+                <button type="button" class="filter-pill" data-stats-preset="last6Months">近 6 月</button>
+                <button type="button" class="filter-pill" data-stats-preset="thisYear">今年</button>
+              </div>
+
+              <form id="stats-range-form" class="stats-range-form">
+                <label>
+                  <span>开始日期</span>
+                  <input id="stats-start-date" name="start_date" type="date" required />
+                </label>
+                <label>
+                  <span>结束日期</span>
+                  <input id="stats-end-date" name="end_date" type="date" required />
+                </label>
+                <button type="submit" class="ghost-button top-button">查询</button>
+              </form>
+            </div>
+
+            <div id="stats-overview-grid" class="stats-overview-grid"></div>
+
+            <div class="stats-layout">
+              <section class="stats-panel">
+                <div class="inline-head">
+                  <span>月度趋势</span>
+                  <span id="stats-trend-caption">按月汇总</span>
+                </div>
+                <div id="stats-trend-chart" class="stats-chart-card"></div>
+              </section>
+
+              <section class="stats-panel">
+                <div class="inline-head">
+                  <span>业务构成</span>
+                  <span>区间内单据与数量</span>
+                </div>
+                <div id="stats-mix-chart" class="stats-mix-list"></div>
+              </section>
+            </div>
+
+            <section class="stats-panel stats-panel--wide">
+              <div class="inline-head">
+                <span>商品排行</span>
+                <span id="stats-top-caption">按活跃度排序</span>
+              </div>
+              <div id="stats-top-products" class="dense-list embedded-list"></div>
+            </section>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="more" hidden>
+          <section class="surface-card section-card">
+            <div class="block-head">
+              <div>
+                <p class="section-eyebrow">基础资料</p>
+                <h2>更多</h2>
+                <p class="head-note">商品、供应商、客户等基础数据维护</p>
+              </div>
+            </div>
+
+            <div class="filter-row" role="tablist" aria-label="配置分类">
+              <button type="button" class="filter-pill" data-more-tab="products">商品</button>
+              <button type="button" class="filter-pill" data-more-tab="suppliers">供应商</button>
+              <button type="button" class="filter-pill" data-more-tab="customers">客户</button>
+            </div>
+
+            <section class="more-panel" data-more-panel="products">
+              <div class="panel-stack">
+                <form id="product-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增商品</h3>
+                    <p>建立商品档案，采购和销售时复用</p>
+                  </div>
+
+                  <div class="two-col">
+                    <label>
+                      <span>SKU</span>
+                      <input name="sku" type="text" placeholder="JC-001" required />
+                    </label>
+                    <label>
+                      <span>商品名称</span>
+                      <input name="name" type="text" placeholder="挂耳咖啡" required />
+                    </label>
+                  </div>
+
+                  <div class="three-col">
+                    <label>
+                      <span>分类</span>
+                      <input name="category" type="text" placeholder="饮品" />
+                    </label>
+                    <label>
+                      <span>单位</span>
+                      <input name="unit" type="text" value="件" />
+                    </label>
+                    <label>
+                      <span>安全库存</span>
+                      <input name="safety_stock" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                  </div>
+
+                  <div class="two-col">
+                    <label>
+                      <span>采购价</span>
+                      <input name="purchase_price" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                    <label>
+                      <span>销售价</span>
+                      <input name="sale_price" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                  </div>
+
+                  <button type="submit" class="primary-button wide-button">保存商品</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有商品</h3>
+                    <p>查看库存和售价</p>
+                  </div>
+                  <div id="product-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+
+            <section class="more-panel" data-more-panel="suppliers" hidden>
+              <div class="panel-stack">
+                <form id="supplier-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增供应商</h3>
+                    <p>集中维护联系人信息，采购时直接选择</p>
+                  </div>
+
+                  <label>
+                    <span>供应商名称</span>
+                    <input name="name" type="text" placeholder="供应商名称" required />
+                  </label>
+
+                  <div class="two-col">
+                    <label>
+                      <span>联系人</span>
+                      <input name="contact" type="text" placeholder="联系人" />
+                    </label>
+                    <label>
+                      <span>电话</span>
+                      <input name="phone" type="text" placeholder="联系电话" />
+                    </label>
+                  </div>
+
+                  <label>
+                    <span>备注</span>
+                    <input name="note" type="text" placeholder="账期、供货特点" />
+                  </label>
+
+                  <button type="submit" class="secondary-button wide-button">保存供应商</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有供应商</h3>
+                    <p>核对联系人与合作备注</p>
+                  </div>
+                  <div id="supplier-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+
+            <section class="more-panel" data-more-panel="customers" hidden>
+              <div class="panel-stack">
+                <form id="customer-form" class="compact-form form-card">
+                  <div class="form-card__head">
+                    <h3>新增客户</h3>
+                    <p>维护客户资料，销售时快速选择</p>
+                  </div>
+
+                  <label>
+                    <span>客户名称</span>
+                    <input name="name" type="text" placeholder="客户名称" required />
+                  </label>
+
+                  <div class="two-col">
+                    <label>
+                      <span>联系人</span>
+                      <input name="contact" type="text" placeholder="联系人" />
+                    </label>
+                    <label>
+                      <span>电话</span>
+                      <input name="phone" type="text" placeholder="联系电话" />
+                    </label>
+                  </div>
+
+                  <label>
+                    <span>备注</span>
+                    <input name="note" type="text" placeholder="渠道、结算方式" />
+                  </label>
+
+                  <button type="submit" class="secondary-button wide-button">保存客户</button>
+                </form>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>现有客户</h3>
+                    <p>销售时直接选择</p>
+                  </div>
+                  <div id="customer-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
+          </section>
+        </section>
+      </main>
+
+      <button id="composer-trigger" class="composer-trigger" type="button">
+        <span class="composer-trigger__label">+ 新建单据</span>
+        <span class="composer-trigger__hint">采购 / 销售 / 调整</span>
+      </button>
+
+    </div>
+
+    <nav id="app-tabbar" class="tabbar" aria-label="主导航" hidden>
+      <button type="button" class="tab-button" data-view-btn="inventory">
+        <span class="tab-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </span>
+        <span class="tab-copy">
+          <strong>库存</strong>
+        </span>
+      </button>
+      <button type="button" class="tab-button" data-view-btn="documents">
+        <span class="tab-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </span>
+        <span class="tab-copy">
+          <strong>单据</strong>
+        </span>
+      </button>
+      <button type="button" class="tab-button" data-view-btn="stats">
+        <span class="tab-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </span>
+        <span class="tab-copy">
+          <strong>统计</strong>
+        </span>
+      </button>
+      <button type="button" class="tab-button" data-view-btn="more">
+        <span class="tab-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </span>
+        <span class="tab-copy">
+          <strong>更多</strong>
+        </span>
+      </button>
+    </nav>
+
+    <div id="composer-overlay" class="composer-overlay" hidden>
+      <div class="composer-backdrop" data-close-composer></div>
+      <section class="composer-sheet">
+        <div class="composer-grabber" aria-hidden="true"></div>
+        <div class="composer-head">
+          <div>
+            <p class="sheet-kicker">快速开单</p>
+            <h3>新建单据</h3>
+            <p class="head-note">采购、销售和库存调整</p>
+          </div>
+          <button type="button" class="ghost-button top-button" data-close-composer>关闭</button>
+        </div>
+
+        <div class="filter-row composer-tabs" role="tablist" aria-label="新建单据类型">
+          <button type="button" class="filter-pill" data-composer-tab="purchase">采购入库</button>
+          <button type="button" class="filter-pill" data-composer-tab="sale">销售出库</button>
+          <button type="button" class="filter-pill" data-composer-tab="adjustment">库存调整</button>
+        </div>
+
+        <section class="composer-panel" data-composer-panel="purchase">
+          <form id="purchase-form" class="compact-form">
+            <label>
+              <span>供应商</span>
+              <select name="partner_id" id="purchase-partner-select" required></select>
+            </label>
+
+            <div class="inline-head">
+              <span>商品明细</span>
+              <button type="button" class="ghost-button small" data-add-row="purchase">添加商品</button>
+            </div>
+            <div id="purchase-items" class="line-items"></div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="批次、仓位、到货说明"></textarea>
+            </label>
+
+            <button type="submit" class="primary-button wide-button">提交采购入库</button>
+          </form>
+        </section>
+
+        <section class="composer-panel" data-composer-panel="sale" hidden>
+          <form id="sale-form" class="compact-form">
+            <label>
+              <span>客户</span>
+              <select name="partner_id" id="sale-partner-select" required></select>
+            </label>
+
+            <div class="inline-head">
+              <span>商品明细</span>
+              <button type="button" class="ghost-button small" data-add-row="sale">添加商品</button>
+            </div>
+            <div id="sale-items" class="line-items"></div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="订单号、发货说明"></textarea>
+            </label>
+
+            <button type="submit" class="primary-button wide-button">提交销售出库</button>
+          </form>
+        </section>
+
+        <section class="composer-panel" data-composer-panel="adjustment" hidden>
+          <form id="adjustment-form" class="compact-form">
+            <label>
+              <span>商品</span>
+              <select name="product_id" id="adjustment-product-select" required></select>
+            </label>
+
+            <div class="two-col">
+              <label>
+                <span>调整数量</span>
+                <input name="quantity_delta" type="number" step="0.01" placeholder="正数盘盈，负数盘亏" required />
+              </label>
+              <label>
+                <span>原因</span>
+                <input name="reason" type="text" placeholder="盘点 / 损耗 / 报废" required />
+              </label>
+            </div>
+
+            <label>
+              <span>备注</span>
+              <textarea name="note" rows="3" placeholder="补充说明"></textarea>
+            </label>
+
+            <button type="submit" class="secondary-button wide-button">提交库存调整</button>
+          </form>
+        </section>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

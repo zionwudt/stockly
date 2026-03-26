@@ -1,9 +1,13 @@
 import { api } from "./api.js";
 import { appendLineItem, removeLineItem, renderApp, showToast } from "./ui.js";
 
+const AUTH_PATH = "/";
+const TENANT_PATH = "/tenant.html";
+const FLASH_KEY = "jiancang_flash";
+const TENANT_AUTO_ENTER_KEY = "jiancang_tenant_auto_enter";
+
 const state = {
   auth: null,
-  tenantHub: null,
   summary: null,
   statistics: null,
   products: [],
@@ -13,7 +17,6 @@ const state = {
   movements: [],
   documents: [],
   ui: {
-    activeAuthTab: "login",
     activeView: "inventory",
     inventoryQuery: "",
     inventoryFilter: "all",
@@ -29,11 +32,9 @@ const state = {
 };
 
 const refs = {
-  authScreen: document.querySelector("#auth-screen"),
   appShell: document.querySelector("#app-shell"),
   tabbar: document.querySelector("#app-tabbar"),
-  loginForm: document.querySelector("#login-form"),
-  registerForm: document.querySelector("#register-form"),
+  tenantButton: document.querySelector("#tenant-button"),
   refreshButton: document.querySelector("#refresh-button"),
   logoutButton: document.querySelector("#logout-button"),
   inventorySearch: document.querySelector("#inventory-search"),
@@ -47,15 +48,11 @@ const refs = {
   purchaseForm: document.querySelector("#purchase-form"),
   saleForm: document.querySelector("#sale-form"),
   adjustmentForm: document.querySelector("#adjustment-form"),
-  tenantCreateForm: document.querySelector("#tenant-create-form"),
-  tenantJoinForm: document.querySelector("#tenant-join-form"),
 };
 
 async function boot() {
   bindViewportOffset();
   bindEvents();
-  renderApp(state);
-  refs.loginForm.elements.username.value = "admin";
   await restoreSession();
 }
 
@@ -83,8 +80,7 @@ function bindViewportOffset() {
 }
 
 function bindEvents() {
-  refs.loginForm.addEventListener("submit", handleLoginSubmit);
-  refs.registerForm.addEventListener("submit", handleRegisterSubmit);
+  refs.tenantButton.addEventListener("click", openTenantCenter);
   refs.refreshButton.addEventListener("click", () => refreshApp("数据已同步。"));
   refs.logoutButton.addEventListener("click", handleLogout);
   refs.composerTrigger.addEventListener("click", () => openComposer("purchase"));
@@ -94,8 +90,6 @@ function bindEvents() {
   });
   refs.statsRangeForm.addEventListener("submit", handleStatisticsRangeSubmit);
 
-  refs.tenantCreateForm.addEventListener("submit", handleTenantCreateSubmit);
-  refs.tenantJoinForm.addEventListener("submit", handleTenantJoinSubmit);
   refs.productForm.addEventListener("submit", handleProductSubmit);
   refs.supplierForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "supplier"));
   refs.customerForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "customer"));
@@ -104,13 +98,6 @@ function bindEvents() {
   refs.adjustmentForm.addEventListener("submit", handleAdjustmentSubmit);
 
   document.addEventListener("click", (event) => {
-    const authTab = event.target.closest("[data-auth-tab]");
-    if (authTab) {
-      state.ui.activeAuthTab = authTab.dataset.authTab;
-      renderApp(state);
-      return;
-    }
-
     const addButton = event.target.closest("[data-add-row]");
     if (addButton) {
       appendLineItem(addButton.dataset.addRow, state.products);
@@ -120,34 +107,6 @@ function bindEvents() {
     const removeButton = event.target.closest("[data-remove-row]");
     if (removeButton) {
       removeLineItem(removeButton);
-      return;
-    }
-
-    const switchTenantButton = event.target.closest("[data-switch-tenant]");
-    if (switchTenantButton) {
-      void handleTenantSwitch(Number(switchTenantButton.dataset.switchTenant));
-      return;
-    }
-
-    const prefillTenantButton = event.target.closest("[data-prefill-tenant-slug]");
-    if (prefillTenantButton) {
-      refs.tenantJoinForm.elements.tenant_slug.value = prefillTenantButton.dataset.prefillTenantSlug || "";
-      refs.tenantJoinForm.elements.tenant_slug.focus();
-      state.ui.activeView = "tenants";
-      renderApp(state);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    const approveButton = event.target.closest("[data-approve-request]");
-    if (approveButton) {
-      void handleJoinRequestDecision(Number(approveButton.dataset.approveRequest), true);
-      return;
-    }
-
-    const rejectButton = event.target.closest("[data-reject-request]");
-    if (rejectButton) {
-      void handleJoinRequestDecision(Number(rejectButton.dataset.rejectRequest), false);
       return;
     }
 
@@ -221,23 +180,33 @@ function bindEvents() {
 async function restoreSession() {
   try {
     await loadAppState();
+    if (!state.auth?.current_tenant) {
+      redirectToTenant("", true);
+      return;
+    }
     showAppShell();
     renderApp(state);
     applyComposerPrefill();
-    showToast("已恢复登录状态。");
+    const flashMessage = consumeFlashMessage();
+    if (flashMessage) {
+      showToast(flashMessage);
+    }
   } catch (error) {
     if (error.status === 401) {
-      showAuthScreen();
+      redirectToAuth();
       return;
     }
-    showAuthScreen();
-    showToast(error.message || "会话恢复失败。");
+    redirectToAuth(error.message || "会话恢复失败。");
   }
 }
 
 async function refreshApp(successMessage = "") {
   try {
     await loadAppState();
+    if (!state.auth?.current_tenant) {
+      redirectToTenant("请先选择一个租户。", true);
+      return;
+    }
     showAppShell();
     renderApp(state);
     applyComposerPrefill();
@@ -254,17 +223,17 @@ async function refreshApp(successMessage = "") {
 }
 
 async function loadAppState() {
-  const [auth, tenantHub] = await Promise.all([api.getMe(), api.getTenantHub()]);
+  const auth = await api.getMe();
   state.auth = auth;
-  state.tenantHub = tenantHub;
   ensureStatisticsRange();
 
-  if (auth.current_tenant) {
-    await loadWorkspaceData();
-  } else {
+  if (!auth.current_tenant) {
     clearDomainState();
+    normalizeUiState();
+    return;
   }
 
+  await loadWorkspaceData();
   normalizeUiState();
 }
 
@@ -294,91 +263,13 @@ async function loadWorkspaceData() {
   state.documents = documents;
 }
 
-async function handleLoginSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    await api.login(formToObject(form));
-    form.elements.password.value = "";
-    showAppShell();
-    await refreshApp("登录成功，请先选择或创建租户。");
-  } catch (error) {
-    showToast(error.message || "登录失败。");
-  }
-}
-
-async function handleRegisterSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    await api.register(formToObject(form));
-    form.reset();
-    showAppShell();
-    await refreshApp("注册成功，请先创建或加入一个租户。");
-  } catch (error) {
-    showToast(error.message || "注册失败。");
-  }
-}
-
 async function handleLogout() {
   try {
     await api.logout();
   } catch (error) {
     showToast(error.message || "退出登录失败。");
   } finally {
-    clearAllState();
-    closeComposerSheet();
-    showAuthScreen();
-  }
-}
-
-async function handleTenantCreateSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    await api.createTenant(formToObject(form));
-    form.reset();
-    state.ui.activeView = "inventory";
-    await refreshApp("租户已创建，并已切换到新租户。");
-  } catch (error) {
-    showToast(error.message || "创建租户失败。");
-  }
-}
-
-async function handleTenantJoinSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    await api.createJoinRequest(formToObject(form));
-    form.elements.note.value = "";
-    await refreshApp("已提交加入申请，请等待租户创建者审批。");
-  } catch (error) {
-    showToast(error.message || "提交加入申请失败。");
-  }
-}
-
-async function handleTenantSwitch(tenantId) {
-  try {
-    await api.switchTenant({ tenant_id: tenantId });
-    if (state.ui.activeView === "tenants") {
-      state.ui.activeView = "inventory";
-    }
-    await refreshApp("已切换租户。");
-  } catch (error) {
-    showToast(error.message || "切换租户失败。");
-  }
-}
-
-async function handleJoinRequestDecision(requestId, approved) {
-  try {
-    const result = approved ? await api.approveJoinRequest(requestId) : await api.rejectJoinRequest(requestId);
-    await refreshApp(result.message || (approved ? "已同意申请。" : "已拒绝申请。"));
-  } catch (error) {
-    showToast(error.message || "处理申请失败。");
+    redirectToAuth();
   }
 }
 
@@ -467,7 +358,7 @@ async function handleAdjustmentSubmit(event) {
 
 async function handleStatisticsPreset(preset) {
   if (!state.auth?.current_tenant) {
-    setActiveView("tenants");
+    redirectToTenant("请先选择一个租户。", true);
     return;
   }
 
@@ -503,12 +394,6 @@ async function handleStatisticsRangeSubmit(event) {
 }
 
 function setActiveView(viewName) {
-  if (viewName !== "tenants" && !state.auth?.current_tenant) {
-    state.ui.activeView = "tenants";
-    renderApp(state);
-    showToast("请先创建租户或切换到一个已加入的租户。");
-    return;
-  }
   state.ui.activeView = viewName;
   renderApp(state);
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -516,7 +401,7 @@ function setActiveView(viewName) {
 
 function openComposer(type = "purchase", productId = null) {
   if (!state.auth?.current_tenant) {
-    showToast("请先切换到一个租户后再新建单据。");
+    redirectToTenant("请先选择一个租户。", true);
     return;
   }
   state.ui.composerOpen = true;
@@ -537,20 +422,12 @@ function closeComposerSheet(resetPrefill = true) {
 async function handleUnauthorized() {
   clearAllState();
   closeComposerSheet();
-  showAuthScreen();
-  showToast("登录已失效，请重新登录。");
+  redirectToAuth("登录已失效，请重新登录。");
 }
 
 function showAppShell() {
-  refs.authScreen.hidden = true;
   refs.appShell.hidden = false;
   refs.tabbar.hidden = false;
-}
-
-function showAuthScreen() {
-  refs.appShell.hidden = true;
-  refs.authScreen.hidden = false;
-  refs.tabbar.hidden = true;
 }
 
 function clearDomainState() {
@@ -566,14 +443,13 @@ function clearDomainState() {
 
 function clearAllState() {
   state.auth = null;
-  state.tenantHub = null;
   clearDomainState();
 }
 
 function normalizeUiState() {
   ensureStatisticsRange();
   if (!state.auth?.current_tenant) {
-    state.ui.activeView = "tenants";
+    state.ui.activeView = "inventory";
     state.ui.composerOpen = false;
     state.ui.composerPrefillProductId = null;
   }
@@ -705,6 +581,41 @@ function toDateInputValue(value) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function redirectToAuth(message = "") {
+  window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
+  if (message) {
+    window.sessionStorage.setItem(FLASH_KEY, message);
+  } else {
+    window.sessionStorage.removeItem(FLASH_KEY);
+  }
+  window.location.replace(AUTH_PATH);
+}
+
+function redirectToTenant(message = "", autoEnter = false) {
+  if (message) {
+    window.sessionStorage.setItem(FLASH_KEY, message);
+  } else {
+    window.sessionStorage.removeItem(FLASH_KEY);
+  }
+  if (autoEnter) {
+    window.sessionStorage.setItem(TENANT_AUTO_ENTER_KEY, "1");
+  } else {
+    window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
+  }
+  window.location.replace(TENANT_PATH);
+}
+
+function openTenantCenter() {
+  window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
+  window.location.assign(TENANT_PATH);
+}
+
+function consumeFlashMessage() {
+  const message = window.sessionStorage.getItem(FLASH_KEY) || "";
+  window.sessionStorage.removeItem(FLASH_KEY);
+  return message;
 }
 
 boot();
