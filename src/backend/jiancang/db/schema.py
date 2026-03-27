@@ -5,8 +5,10 @@ CREATE TABLE IF NOT EXISTS users (
     display_name TEXT NOT NULL DEFAULT '',
     password_salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
+    last_tenant_id INTEGER,
     is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(last_tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
 )
 """
 

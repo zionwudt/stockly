@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
@@ -16,7 +17,6 @@ class TenantServiceMixin:
                 principal.user_id,
                 current_tenant_id=principal.tenant_id,
             )
-            discoverable_tenants = self._list_tenant_directory(connection, principal.user_id)
             my_join_requests = self._list_my_join_requests(connection, principal.user_id)
             pending_approvals = self._list_pending_approvals(
                 connection,
@@ -26,17 +26,20 @@ class TenantServiceMixin:
 
         return {
             "accessible_tenants": accessible_tenants,
-            "discoverable_tenants": discoverable_tenants,
             "my_join_requests": my_join_requests,
             "pending_approvals": pending_approvals,
         }
 
     def create_tenant(self, principal: SessionPrincipal, payload: dict[str, Any]) -> dict[str, Any]:
         name = self._required_text(payload, "name")
-        slug = self._normalized_tenant_slug(self._required_text(payload, "slug"))
-        self._validate_tenant_slug(slug)
 
         with get_connection(self.db_path) as connection:
+            raw_slug = self._normalized_tenant_slug(self._text(payload, "slug"))
+            if raw_slug:
+                slug = raw_slug
+                self._validate_tenant_slug(slug)
+            else:
+                slug = self._next_tenant_slug(connection, name)
             try:
                 connection.execute(
                     """
@@ -227,3 +230,22 @@ class TenantServiceMixin:
                 """,
                 (request_row["tenant_id"], request_row["user_id"], decided_at),
             )
+
+    def _next_tenant_slug(self, connection: sqlite3.Connection, name: str) -> str:
+        base = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-")
+        base = re.sub(r"-{2,}", "-", base)
+        if not base:
+            base = "tenant"
+        base = base[:24].rstrip("-") or "tenant"
+        candidate = base
+        suffix = 2
+
+        while True:
+            exists = connection.execute(
+                "SELECT 1 FROM tenants WHERE slug = ? LIMIT 1",
+                (candidate,),
+            ).fetchone()
+            if exists is None:
+                return candidate
+            candidate = f"{base[: max(1, 32 - len(str(suffix)) - 1)]}-{suffix}"
+            suffix += 1

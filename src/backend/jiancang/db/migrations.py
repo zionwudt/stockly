@@ -51,6 +51,9 @@ def _migrate_identity_schema(connection: sqlite3.Connection) -> None:
     if _table_exists(connection, "users") and _column_exists(connection, "users", "tenant_id"):
         _migrate_users_to_global_accounts(connection)
 
+    if _table_exists(connection, "users"):
+        _ensure_column(connection, "users", "last_tenant_id", "INTEGER")
+
     if not _table_exists(connection, "sessions") or not _column_exists(connection, "sessions", "tenant_id"):
         _rebuild_sessions_table(connection)
 
@@ -88,14 +91,15 @@ def _migrate_users_to_global_accounts(connection: sqlite3.Connection) -> None:
         seen_usernames.add(username)
         connection.execute(
             """
-            INSERT INTO users (username, display_name, password_salt, password_hash, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, display_name, password_salt, password_hash, last_tenant_id, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
                 str(row["display_name"] or row["username"]),
                 row["password_salt"],
                 row["password_hash"],
+                int(row["tenant_id"]),
                 int(row["is_active"]),
                 row["created_at"],
             ),
@@ -204,6 +208,14 @@ def _seed_default_identity(connection: sqlite3.Connection) -> None:
     connection.execute(
         "UPDATE tenants SET owner_user_id = COALESCE(owner_user_id, ?) WHERE id = ?",
         (admin_user_id, tenant_id),
+    )
+    connection.execute(
+        """
+        UPDATE users
+        SET last_tenant_id = COALESCE(last_tenant_id, ?)
+        WHERE id = ?
+        """,
+        (tenant_id, admin_user_id),
     )
 
 

@@ -8,36 +8,12 @@
   </head>
   <body>
     <div id="app-shell" class="app-shell" hidden>
-      <header class="topbar">
-        <div class="topbar-main">
-          <div class="brand-row">
-            <div class="brand-copy-group">
-              <h1>简仓</h1>
-            </div>
-            <span id="tenant-badge" class="brand-tag">未选择租户</span>
-          </div>
-          <div class="status-strip">
-            <p id="status-summary" class="status-summary">正在加载...</p>
-            <span id="user-badge" class="user-badge">未登录</span>
-          </div>
+      <section id="page-header" class="surface-card page-header">
+        <div class="page-header__copy">
+          <p id="page-header-kicker" class="page-header__kicker">工作台</p>
+          <h1 id="page-header-title" class="page-header__title">库存</h1>
+          <p id="page-header-note" class="page-header__note">查看库存状态与预警商品。</p>
         </div>
-
-        <div class="topbar-actions">
-          <button id="tenant-button" class="ghost-button top-button" type="button">租户</button>
-          <button id="refresh-button" class="ghost-button top-button" type="button">同步</button>
-          <button id="logout-button" class="ghost-button top-button" type="button">退出</button>
-        </div>
-      </header>
-
-      <section id="metrics-section" class="surface-card metrics-shell">
-        <div class="section-heading">
-          <div>
-            <p class="section-eyebrow">今日概览</p>
-            <h2>核心指标</h2>
-          </div>
-          <p class="section-brief">当前租户数据概览</p>
-        </div>
-        <div id="metrics-grid" class="metrics-grid"></div>
       </section>
 
       <main class="view-stack">
@@ -113,6 +89,17 @@
               <span id="stats-range-summary" class="head-hint"></span>
             </div>
 
+            <section id="metrics-section" class="metrics-shell">
+              <div class="section-heading">
+                <div>
+                  <p class="section-eyebrow">今日概览</p>
+                  <h2>核心指标</h2>
+                </div>
+                <p class="section-brief">当前租户数据概览</p>
+              </div>
+              <div id="metrics-grid" class="metrics-grid"></div>
+            </section>
+
             <div class="stats-toolbar">
               <div class="filter-row stats-preset-row" role="tablist" aria-label="统计时间快捷选择">
                 <button type="button" class="filter-pill" data-stats-preset="thisMonth">本月</button>
@@ -165,23 +152,171 @@
         </section>
 
         <section class="app-view" data-view="more" hidden>
-          <section class="surface-card section-card">
-            <div class="block-head">
-              <div>
-                <p class="section-eyebrow">基础资料</p>
-                <h2>更多</h2>
-                <p class="head-note">商品、供应商、客户等基础数据维护</p>
-              </div>
-            </div>
+          <section class="surface-card section-card section-card--more">
+            <div class="more-home" data-more-home>
+              <section class="more-summary-card">
+                <div class="more-summary-card__head">
+                  <div class="more-summary-card__brand-row">
+                    <div class="more-summary-card__brand">简仓</div>
+                    <div class="more-summary-card__badges">
+                      <span id="tenant-badge" class="brand-tag">未选择租户</span>
+                      <span id="user-badge" class="user-badge">未登录</span>
+                    </div>
+                  </div>
+                  <p id="status-summary" class="status-summary">正在加载...</p>
+                </div>
 
-            <div class="filter-row" role="tablist" aria-label="配置分类">
-              <button type="button" class="filter-pill" data-more-tab="products">商品</button>
-              <button type="button" class="filter-pill" data-more-tab="suppliers">供应商</button>
-              <button type="button" class="filter-pill" data-more-tab="customers">客户</button>
-            </div>
+                <div class="more-summary-card__actions">
+                  <button id="tenant-button" class="ghost-button top-button" type="button">租户管理</button>
+                  <button id="refresh-button" class="ghost-button top-button" type="button">同步</button>
+                  <button id="logout-button" class="ghost-button top-button" type="button">退出</button>
+                </div>
+              </section>
+
+              <section class="more-menu-shell">
+                <div class="more-group">
+                  <div class="more-group__head">
+                    <span>配置菜单</span>
+                    <p>选择要进入的功能模块，再进入对应二级页面处理。</p>
+                  </div>
+                </div>
+
+                <div class="more-nav" aria-label="配置分类">
+                <button type="button" class="more-nav__button filter-pill" data-more-tab="tenants">
+                  <span class="more-nav__glyph more-nav__glyph--tenant">租</span>
+                  <span class="more-nav__copy">
+                    <strong>租户</strong>
+                    <small>空间与协作</small>
+                  </span>
+                  <span class="more-nav__chevron" aria-hidden="true">›</span>
+                </button>
+                <button type="button" class="more-nav__button filter-pill" data-more-tab="products">
+                  <span class="more-nav__glyph more-nav__glyph--product">品</span>
+                  <span class="more-nav__copy">
+                    <strong>商品</strong>
+                    <small>档案与库存</small>
+                  </span>
+                  <span class="more-nav__chevron" aria-hidden="true">›</span>
+                </button>
+                <button type="button" class="more-nav__button filter-pill" data-more-tab="suppliers">
+                  <span class="more-nav__glyph more-nav__glyph--supplier">供</span>
+                  <span class="more-nav__copy">
+                    <strong>供应商</strong>
+                    <small>采购联系人</small>
+                  </span>
+                  <span class="more-nav__chevron" aria-hidden="true">›</span>
+                </button>
+                <button type="button" class="more-nav__button filter-pill" data-more-tab="customers">
+                  <span class="more-nav__glyph more-nav__glyph--customer">客</span>
+                  <span class="more-nav__copy">
+                    <strong>客户</strong>
+                    <small>销售往来方</small>
+                  </span>
+                  <span class="more-nav__chevron" aria-hidden="true">›</span>
+                </button>
+                </div>
+              </section>
+              </div>
+
+            <section class="more-detail-head" data-more-detail-head hidden>
+              <button type="button" class="ghost-button more-detail-head__back" data-more-back>返回更多</button>
+              <div class="more-detail-head__copy">
+                <p id="more-detail-kicker" class="more-detail-head__kicker">配置项</p>
+                <h3 id="more-detail-title" class="more-detail-head__title">租户</h3>
+                <p id="more-detail-note" class="more-detail-head__note">管理当前工作空间和协作入口。</p>
+              </div>
+            </section>
+
+            <section class="more-panel" data-more-panel="tenants" hidden>
+              <div class="more-group">
+                <div class="more-group__head">
+                  <span>租户空间</span>
+                  <p>当前工作租户、协作申请和审批入口都放在这里。</p>
+                </div>
+              </div>
+              <div class="panel-stack panel-stack--more">
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>工作租户</h3>
+                    <p id="tenant-more-summary">正在加载租户信息。</p>
+                  </div>
+                  <div id="tenant-access-list" class="dense-list embedded-list"></div>
+                </section>
+
+                <section class="list-card tenant-actions">
+                  <div class="list-card__head">
+                    <h3>创建或加入</h3>
+                    <p>在当前工作租户之外，继续创建新空间或提交加入申请。</p>
+                  </div>
+
+                  <div class="tenant-mode-switch" role="tablist" aria-label="租户操作方式">
+                    <button type="button" class="filter-pill is-active" data-tenant-tab="create">新建租户</button>
+                    <button type="button" class="filter-pill" data-tenant-tab="join">申请加入</button>
+                  </div>
+
+                  <section class="tenant-action-panel" data-tenant-panel="create">
+                    <form id="tenant-create-form" class="compact-form form-card form-card--embedded">
+                      <div class="form-card__head">
+                        <h3>新建租户</h3>
+                        <p>创建后会立即切换到新租户，租户标识会由系统自动生成。</p>
+                      </div>
+
+                      <label>
+                        <span>租户名称</span>
+                        <input name="name" type="text" placeholder="例如 华东仓" required />
+                      </label>
+
+                      <button type="submit" class="primary-button wide-button">创建并切换</button>
+                    </form>
+                  </section>
+
+                  <section class="tenant-action-panel" data-tenant-panel="join" hidden>
+                    <form id="tenant-join-form" class="compact-form form-card form-card--embedded">
+                      <div class="form-card__head">
+                        <h3>申请加入</h3>
+                        <p>提交后保持当前工作租户不变，等待目标租户管理员审批。</p>
+                      </div>
+
+                      <label>
+                        <span>租户标识</span>
+                        <input name="tenant_slug" type="text" placeholder="请输入租户标识" required />
+                      </label>
+                      <label>
+                        <span>申请说明</span>
+                        <textarea name="note" rows="3" placeholder="团队身份、用途或补充说明"></textarea>
+                      </label>
+
+                      <button type="submit" class="secondary-button wide-button">提交申请</button>
+                    </form>
+                  </section>
+                </section>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>我的申请</h3>
+                    <p id="tenant-request-summary">正在加载申请记录。</p>
+                  </div>
+                  <div id="my-join-request-list" class="dense-list embedded-list"></div>
+                </section>
+
+                <section class="list-card">
+                  <div class="list-card__head">
+                    <h3>待我审批</h3>
+                    <p id="tenant-approval-summary">如果你是租户创建者，这里会显示待处理申请。</p>
+                  </div>
+                  <div id="tenant-approval-list" class="dense-list embedded-list"></div>
+                </section>
+              </div>
+            </section>
 
             <section class="more-panel" data-more-panel="products">
-              <div class="panel-stack">
+              <div class="more-group">
+                <div class="more-group__head">
+                  <span>商品资料</span>
+                  <p>先新增商品，再让采购、销售和盘点直接复用这些档案。</p>
+                </div>
+              </div>
+              <div class="panel-stack panel-stack--more">
                 <form id="product-form" class="compact-form form-card">
                   <div class="form-card__head">
                     <h3>新增商品</h3>
@@ -239,7 +374,13 @@
             </section>
 
             <section class="more-panel" data-more-panel="suppliers" hidden>
-              <div class="panel-stack">
+              <div class="more-group">
+                <div class="more-group__head">
+                  <span>供应商资料</span>
+                  <p>维护采购合作方的联系人、电话和补充备注。</p>
+                </div>
+              </div>
+              <div class="panel-stack panel-stack--more">
                 <form id="supplier-form" class="compact-form form-card">
                   <div class="form-card__head">
                     <h3>新增供应商</h3>
@@ -281,7 +422,13 @@
             </section>
 
             <section class="more-panel" data-more-panel="customers" hidden>
-              <div class="panel-stack">
+              <div class="more-group">
+                <div class="more-group__head">
+                  <span>客户资料</span>
+                  <p>沉淀销售客户信息，开单时就能更快完成选择。</p>
+                </div>
+              </div>
+              <div class="panel-stack panel-stack--more">
                 <form id="customer-form" class="compact-form form-card">
                   <div class="form-card__head">
                     <h3>新增客户</h3>

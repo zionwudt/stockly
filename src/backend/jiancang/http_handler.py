@@ -252,8 +252,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
         clean_path = unquote(path)
         if clean_path in {"", "/", "/auth", "/auth/"}:
             file_path = self.static_dir / "index.html"
-        elif clean_path in {"/tenant", "/tenant/"}:
-            file_path = self.static_dir / "tenant.html"
+        elif clean_path in {"/tenant", "/tenant/", "/tenant.html"}:
+            self._redirect("/app")
+            return
         elif clean_path in {"/app", "/app/"}:
             file_path = self.static_dir / "app.html"
         else:
@@ -274,6 +275,12 @@ class JianCangHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _redirect(self, location: str, status: HTTPStatus = HTTPStatus.FOUND) -> None:
+        self.send_response(status)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send_json(
         self,

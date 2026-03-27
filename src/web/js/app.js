@@ -2,12 +2,11 @@ import { api } from "./api.js";
 import { appendLineItem, removeLineItem, renderApp, showToast } from "./ui.js";
 
 const AUTH_PATH = "/";
-const TENANT_PATH = "/tenant.html";
 const FLASH_KEY = "jiancang_flash";
-const TENANT_AUTO_ENTER_KEY = "jiancang_tenant_auto_enter";
 
 const state = {
   auth: null,
+  tenantHub: null,
   summary: null,
   statistics: null,
   products: [],
@@ -24,7 +23,8 @@ const state = {
     statsPreset: "last6Months",
     statsStartDate: "",
     statsEndDate: "",
-    activeMoreTab: "products",
+    activeMoreTab: "menu",
+    activeActionTab: "create",
     composerOpen: false,
     activeComposerType: "purchase",
     composerPrefillProductId: null,
@@ -42,6 +42,8 @@ const refs = {
   statsStartDate: document.querySelector("#stats-start-date"),
   statsEndDate: document.querySelector("#stats-end-date"),
   composerTrigger: document.querySelector("#composer-trigger"),
+  tenantCreateForm: document.querySelector("#tenant-create-form"),
+  tenantJoinForm: document.querySelector("#tenant-join-form"),
   productForm: document.querySelector("#product-form"),
   supplierForm: document.querySelector("#supplier-form"),
   customerForm: document.querySelector("#customer-form"),
@@ -84,6 +86,8 @@ function bindEvents() {
   refs.refreshButton.addEventListener("click", () => refreshApp("数据已同步。"));
   refs.logoutButton.addEventListener("click", handleLogout);
   refs.composerTrigger.addEventListener("click", () => openComposer("purchase"));
+  refs.tenantCreateForm.addEventListener("submit", handleTenantCreateSubmit);
+  refs.tenantJoinForm.addEventListener("submit", handleTenantJoinSubmit);
   refs.inventorySearch.addEventListener("input", (event) => {
     state.ui.inventoryQuery = event.currentTarget.value.trim();
     renderApp(state);
@@ -101,6 +105,13 @@ function bindEvents() {
     const addButton = event.target.closest("[data-add-row]");
     if (addButton) {
       appendLineItem(addButton.dataset.addRow, state.products);
+      return;
+    }
+
+    const tenantTab = event.target.closest("[data-tenant-tab]");
+    if (tenantTab) {
+      state.ui.activeActionTab = tenantTab.dataset.tenantTab;
+      renderApp(state);
       return;
     }
 
@@ -139,7 +150,38 @@ function bindEvents() {
     const moreTab = event.target.closest("[data-more-tab]");
     if (moreTab) {
       state.ui.activeMoreTab = moreTab.dataset.moreTab;
+      state.ui.activeView = "more";
       renderApp(state);
+      return;
+    }
+
+    const moreBack = event.target.closest("[data-more-back]");
+    if (moreBack) {
+      state.ui.activeMoreTab = state.auth?.current_tenant ? "menu" : "tenants";
+      renderApp(state);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const enterTenantButton = event.target.closest("[data-enter-tenant]");
+    if (enterTenantButton) {
+      const tenantId = Number(enterTenantButton.dataset.enterTenant);
+      const tenant = getAccessibleTenants().find((item) => Number(item.id) === tenantId);
+      if (tenant) {
+        void enterTenant(tenant);
+      }
+      return;
+    }
+
+    const approveButton = event.target.closest("[data-approve-request]");
+    if (approveButton) {
+      void handleJoinRequestDecision(Number(approveButton.dataset.approveRequest), true);
+      return;
+    }
+
+    const rejectButton = event.target.closest("[data-reject-request]");
+    if (rejectButton) {
+      void handleJoinRequestDecision(Number(rejectButton.dataset.rejectRequest), false);
       return;
     }
 
@@ -180,10 +222,6 @@ function bindEvents() {
 async function restoreSession() {
   try {
     await loadAppState();
-    if (!state.auth?.current_tenant) {
-      redirectToTenant("", true);
-      return;
-    }
     showAppShell();
     renderApp(state);
     applyComposerPrefill();
@@ -203,10 +241,6 @@ async function restoreSession() {
 async function refreshApp(successMessage = "") {
   try {
     await loadAppState();
-    if (!state.auth?.current_tenant) {
-      redirectToTenant("请先选择一个租户。", true);
-      return;
-    }
     showAppShell();
     renderApp(state);
     applyComposerPrefill();
@@ -223,8 +257,9 @@ async function refreshApp(successMessage = "") {
 }
 
 async function loadAppState() {
-  const auth = await api.getMe();
+  const [auth, tenantHub] = await Promise.all([api.getMe(), api.getTenantHub()]);
   state.auth = auth;
+  state.tenantHub = tenantHub;
   ensureStatisticsRange();
 
   if (!auth.current_tenant) {
@@ -270,6 +305,65 @@ async function handleLogout() {
     showToast(error.message || "退出登录失败。");
   } finally {
     redirectToAuth();
+  }
+}
+
+async function handleTenantCreateSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    const result = await api.createTenant(formToObject(form));
+    form.reset();
+    state.ui.activeView = "more";
+    state.ui.activeMoreTab = "tenants";
+    state.ui.activeActionTab = "create";
+    await refreshApp(result.message || "租户已创建。");
+  } catch (error) {
+    showToast(error.message || "创建租户失败。");
+  }
+}
+
+async function handleTenantJoinSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    const result = await api.createJoinRequest(formToObject(form));
+    form.reset();
+    state.ui.activeView = "more";
+    state.ui.activeMoreTab = "tenants";
+    state.ui.activeActionTab = "join";
+    await refreshApp(result.message || "已提交加入申请，请等待处理。");
+  } catch (error) {
+    showToast(error.message || "提交加入申请失败。");
+  }
+}
+
+async function handleJoinRequestDecision(requestId, approved) {
+  try {
+    const result = approved ? await api.approveJoinRequest(requestId) : await api.rejectJoinRequest(requestId);
+    state.ui.activeView = "more";
+    state.ui.activeMoreTab = "tenants";
+    await refreshApp(result.message || (approved ? "已同意申请。" : "已拒绝申请。"));
+  } catch (error) {
+    showToast(error.message || "处理申请失败。");
+  }
+}
+
+async function enterTenant(tenant) {
+  if (tenant.is_current) {
+    showToast(`当前正在使用 ${tenant.name}。`);
+    return;
+  }
+
+  try {
+    await api.switchTenant({ tenant_id: tenant.id });
+    state.ui.activeView = "more";
+    state.ui.activeMoreTab = "tenants";
+    await refreshApp(`已切换到 ${tenant.name}。`);
+  } catch (error) {
+    showToast(error.message || "切换租户失败。");
   }
 }
 
@@ -358,7 +452,8 @@ async function handleAdjustmentSubmit(event) {
 
 async function handleStatisticsPreset(preset) {
   if (!state.auth?.current_tenant) {
-    redirectToTenant("请先选择一个租户。", true);
+    openTenantCenter();
+    showToast("请先创建租户或等待加入申请通过。");
     return;
   }
 
@@ -395,13 +490,17 @@ async function handleStatisticsRangeSubmit(event) {
 
 function setActiveView(viewName) {
   state.ui.activeView = viewName;
+  if (viewName === "more") {
+    state.ui.activeMoreTab = state.auth?.current_tenant ? "menu" : "tenants";
+  }
   renderApp(state);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function openComposer(type = "purchase", productId = null) {
   if (!state.auth?.current_tenant) {
-    redirectToTenant("请先选择一个租户。", true);
+    openTenantCenter();
+    showToast("请先创建租户或等待加入申请通过。");
     return;
   }
   state.ui.composerOpen = true;
@@ -431,6 +530,7 @@ function showAppShell() {
 }
 
 function clearDomainState() {
+  state.tenantHub = null;
   state.summary = null;
   state.statistics = null;
   state.products = [];
@@ -448,8 +548,15 @@ function clearAllState() {
 
 function normalizeUiState() {
   ensureStatisticsRange();
+  if (!["menu", "tenants", "products", "suppliers", "customers"].includes(state.ui.activeMoreTab)) {
+    state.ui.activeMoreTab = "menu";
+  }
+  if (!["create", "join"].includes(state.ui.activeActionTab)) {
+    state.ui.activeActionTab = "create";
+  }
   if (!state.auth?.current_tenant) {
-    state.ui.activeView = "inventory";
+    state.ui.activeView = "more";
+    state.ui.activeMoreTab = "tenants";
     state.ui.composerOpen = false;
     state.ui.composerPrefillProductId = null;
   }
@@ -584,7 +691,6 @@ function toDateInputValue(value) {
 }
 
 function redirectToAuth(message = "") {
-  window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
   if (message) {
     window.sessionStorage.setItem(FLASH_KEY, message);
   } else {
@@ -593,29 +699,21 @@ function redirectToAuth(message = "") {
   window.location.replace(AUTH_PATH);
 }
 
-function redirectToTenant(message = "", autoEnter = false) {
-  if (message) {
-    window.sessionStorage.setItem(FLASH_KEY, message);
-  } else {
-    window.sessionStorage.removeItem(FLASH_KEY);
-  }
-  if (autoEnter) {
-    window.sessionStorage.setItem(TENANT_AUTO_ENTER_KEY, "1");
-  } else {
-    window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
-  }
-  window.location.replace(TENANT_PATH);
-}
-
 function openTenantCenter() {
-  window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
-  window.location.assign(TENANT_PATH);
+  state.ui.activeView = "more";
+  state.ui.activeMoreTab = "tenants";
+  renderApp(state);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function consumeFlashMessage() {
   const message = window.sessionStorage.getItem(FLASH_KEY) || "";
   window.sessionStorage.removeItem(FLASH_KEY);
   return message;
+}
+
+function getAccessibleTenants() {
+  return state.tenantHub?.accessible_tenants || state.auth?.available_tenants || [];
 }
 
 boot();

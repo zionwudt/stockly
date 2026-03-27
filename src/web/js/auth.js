@@ -1,9 +1,7 @@
 import { api } from "./api.js";
 
 const APP_PATH = "/app.html";
-const TENANT_PATH = "/tenant.html";
 const FLASH_KEY = "jiancang_flash";
-const TENANT_AUTO_ENTER_KEY = "jiancang_tenant_auto_enter";
 
 const refs = {
   feedback: document.querySelector("#auth-feedback"),
@@ -35,12 +33,8 @@ function bindEvents() {
 
 async function restoreSession() {
   try {
-    const auth = await api.getMe();
-    if (auth.current_tenant) {
-      goToApp();
-      return;
-    }
-    goToTenant(true);
+    await api.getMe();
+    goToApp();
   } catch (error) {
     if (error.status !== 401) {
       showFeedback(error.message || "会话检查失败，请稍后重试。");
@@ -53,9 +47,14 @@ async function handleLoginSubmit(event) {
   clearFeedback();
 
   try {
-    await api.login(formToObject(event.currentTarget));
-    setFlashMessage("登录成功，请先选择或创建租户。");
-    goToTenant(true);
+    const auth = await api.login(formToObject(event.currentTarget));
+    if (auth.current_tenant) {
+      setFlashMessage(`欢迎回来，已进入 ${auth.current_tenant.name}。`);
+      goToApp();
+      return;
+    }
+    setFlashMessage("登录成功，请先创建租户或提交加入申请。");
+    goToApp();
   } catch (error) {
     showFeedback(error.message || "登录失败。");
   }
@@ -66,9 +65,10 @@ async function handleRegisterSubmit(event) {
   clearFeedback();
 
   try {
-    await api.register(formToObject(event.currentTarget));
-    setFlashMessage("注册成功，请先创建或加入一个租户。");
-    goToTenant(true);
+    const auth = await api.register(formToObject(event.currentTarget));
+    const tenantName = auth.current_tenant?.name || "默认租户";
+    setFlashMessage(`注册成功，已自动进入 ${tenantName}。`);
+    goToApp();
   } catch (error) {
     showFeedback(error.message || "注册失败。");
   }
@@ -115,15 +115,6 @@ function formToObject(form) {
 
 function goToApp() {
   window.location.replace(APP_PATH);
-}
-
-function goToTenant(autoEnter = false) {
-  if (autoEnter) {
-    window.sessionStorage.setItem(TENANT_AUTO_ENTER_KEY, "1");
-  } else {
-    window.sessionStorage.removeItem(TENANT_AUTO_ENTER_KEY);
-  }
-  window.location.replace(TENANT_PATH);
 }
 
 boot();

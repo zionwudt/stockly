@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
@@ -46,13 +47,24 @@ class AuthServiceMixin:
                 (username, display_name, salt, hash_password(password, salt), db_now()),
             )
             user_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
-            session_token = self._create_session(connection, user_id=user_id, tenant_id=None)
+            tenant = self._create_default_tenant_for_user(
+                connection,
+                user_id=int(user_id),
+                display_name=display_name,
+                username=username,
+            )
+            self._remember_last_tenant(connection, int(user_id), tenant["id"])
+            session_token = self._create_session(connection, user_id=int(user_id), tenant_id=tenant["id"])
             connection.commit()
 
         principal = SessionPrincipal(
             user_id=int(user_id),
             username=username,
             display_name=display_name,
+            tenant_id=tenant["id"],
+            tenant_name=tenant["name"],
+            tenant_slug=tenant["slug"],
+            tenant_role="owner",
         )
         return principal, session_token
 
@@ -64,7 +76,7 @@ class AuthServiceMixin:
         with get_connection(self.db_path) as connection:
             user_row = connection.execute(
                 """
-                SELECT id, username, display_name, password_salt, password_hash, is_active
+                SELECT id, username, display_name, password_salt, password_hash, last_tenant_id, is_active
                 FROM users
                 WHERE username = ?
                 LIMIT 1
@@ -78,8 +90,14 @@ class AuthServiceMixin:
             if not verify_password(password, user_row["password_salt"], user_row["password_hash"]):
                 raise ValidationError("账号或密码不正确。")
 
-            tenant_row = self._resolve_login_tenant(connection, int(user_row["id"]), preferred_tenant_slug)
+            tenant_row = self._resolve_login_tenant(
+                connection,
+                int(user_row["id"]),
+                preferred_tenant_slug,
+                int(user_row["last_tenant_id"]) if user_row["last_tenant_id"] is not None else None,
+            )
             tenant_id = int(tenant_row["tenant_id"]) if tenant_row is not None else None
+            self._remember_last_tenant(connection, int(user_row["id"]), tenant_id)
             session_token = self._create_session(connection, user_id=int(user_row["id"]), tenant_id=tenant_id)
             connection.commit()
 
@@ -101,6 +119,7 @@ class AuthServiceMixin:
                     s.tenant_id,
                     u.username,
                     u.display_name,
+                    u.last_tenant_id,
                     u.is_active
                 FROM sessions s
                 JOIN users u ON u.id = s.user_id
@@ -157,6 +176,7 @@ class AuthServiceMixin:
                 "UPDATE sessions SET tenant_id = ? WHERE token_hash = ?",
                 (tenant_row["tenant_id"], hash_token(session_token)),
             )
+            self._remember_last_tenant(connection, principal.user_id, int(tenant_row["tenant_id"]))
             connection.commit()
 
         return SessionPrincipal(
@@ -227,13 +247,14 @@ class AuthServiceMixin:
         connection: sqlite3.Connection,
         user_id: int,
         preferred_tenant_slug: str,
+        last_tenant_id: int | None,
     ) -> sqlite3.Row | None:
         if preferred_tenant_slug:
             tenant_row = self._membership_row_by_slug(connection, user_id, preferred_tenant_slug)
             if tenant_row is None:
                 raise ValidationError("当前账号尚未加入该租户，或租户不可用。")
             return tenant_row
-        return None
+        return self._resolve_default_tenant(connection, user_id, last_tenant_id)
 
     def _resolve_session_tenant(
         self,
@@ -242,27 +263,102 @@ class AuthServiceMixin:
         session_token: str,
     ) -> sqlite3.Row | None:
         tenant_id = session_row["tenant_id"]
-        if tenant_id is None:
-            return None
+        tenant_row = None
 
-        tenant_row = connection.execute(
-            """
-            SELECT
-                t.id AS tenant_id,
-                t.name AS tenant_name,
-                t.slug AS tenant_slug,
-                tm.role AS tenant_role
-            FROM tenant_memberships tm
-            JOIN tenants t ON t.id = tm.tenant_id
-            WHERE tm.user_id = ? AND tm.tenant_id = ? AND t.status = 'active'
-            LIMIT 1
-            """,
-            (session_row["user_id"], tenant_id),
-        ).fetchone()
-        if tenant_row is None:
+        if tenant_id is not None:
+            tenant_row = self._membership_row_by_id(connection, int(session_row["user_id"]), int(tenant_id))
+
+        if tenant_row is not None:
+            self._remember_last_tenant(connection, int(session_row["user_id"]), int(tenant_row["tenant_id"]))
+            connection.commit()
+            return tenant_row
+
+        fallback_row = self._resolve_default_tenant(
+            connection,
+            int(session_row["user_id"]),
+            int(session_row["last_tenant_id"]) if session_row["last_tenant_id"] is not None else None,
+        )
+        if fallback_row is not None:
+            connection.execute(
+                "UPDATE sessions SET tenant_id = ? WHERE token_hash = ?",
+                (fallback_row["tenant_id"], hash_token(session_token)),
+            )
+            self._remember_last_tenant(connection, int(session_row["user_id"]), int(fallback_row["tenant_id"]))
+        elif tenant_id is not None:
             connection.execute(
                 "UPDATE sessions SET tenant_id = NULL WHERE token_hash = ?",
                 (hash_token(session_token),),
             )
-            connection.commit()
-        return tenant_row
+            self._remember_last_tenant(connection, int(session_row["user_id"]), None)
+        connection.commit()
+        return fallback_row
+
+    def _resolve_default_tenant(
+        self,
+        connection: sqlite3.Connection,
+        user_id: int,
+        last_tenant_id: int | None,
+    ) -> sqlite3.Row | None:
+        if last_tenant_id:
+            remembered_row = self._membership_row_by_id(connection, user_id, last_tenant_id)
+            if remembered_row is not None:
+                return remembered_row
+        return self._first_membership_row(connection, user_id)
+
+    @staticmethod
+    def _remember_last_tenant(
+        connection: sqlite3.Connection,
+        user_id: int,
+        tenant_id: int | None,
+    ) -> None:
+        connection.execute(
+            "UPDATE users SET last_tenant_id = ? WHERE id = ?",
+            (tenant_id, user_id),
+        )
+
+    def _create_default_tenant_for_user(
+        self,
+        connection: sqlite3.Connection,
+        user_id: int,
+        display_name: str,
+        username: str,
+    ) -> dict[str, Any]:
+        name = f"{display_name} 的默认租户"
+        slug = self._next_default_tenant_slug(connection, username)
+        created_at = db_now()
+
+        connection.execute(
+            """
+            INSERT INTO tenants (name, slug, status, owner_user_id, created_at)
+            VALUES (?, ?, 'active', ?, ?)
+            """,
+            (name, slug, user_id, created_at),
+        )
+        tenant_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+        connection.execute(
+            """
+            INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
+            VALUES (?, ?, 'owner', ?)
+            """,
+            (tenant_id, user_id, created_at),
+        )
+        return {"id": tenant_id, "name": name, "slug": slug}
+
+    def _next_default_tenant_slug(self, connection: sqlite3.Connection, username: str) -> str:
+        base = re.sub(r"[^a-z0-9-]+", "-", username.replace("_", "-")).strip("-")
+        if not base:
+            base = "user"
+        base = base[:24].rstrip("-") or "user"
+        candidate_base = f"{base}-default"
+        candidate = candidate_base
+        suffix = 2
+
+        while True:
+            exists = connection.execute(
+                "SELECT 1 FROM tenants WHERE slug = ? LIMIT 1",
+                (candidate,),
+            ).fetchone()
+            if exists is None:
+                return candidate
+            candidate = f"{candidate_base[: max(1, 32 - len(str(suffix)) - 1)]}-{suffix}"
+            suffix += 1

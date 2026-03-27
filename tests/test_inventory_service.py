@@ -23,7 +23,7 @@ def test_authenticate_user_creates_reusable_session(service: InventoryService) -
     assert service.get_auth_profile(context)["tenant"]["slug"] == DEFAULT_TENANT_SLUG
 
 
-def test_authenticate_user_without_tenant_selects_no_current_tenant(service: InventoryService) -> None:
+def test_authenticate_user_without_tenant_restores_default_membership(service: InventoryService) -> None:
     principal, session_token = service.authenticate_user(
         {
             "username": DEFAULT_ADMIN_USERNAME,
@@ -34,14 +34,15 @@ def test_authenticate_user_without_tenant_selects_no_current_tenant(service: Inv
     session_principal = service.get_principal_for_session(session_token)
     profile = service.get_auth_profile(principal)
 
-    assert principal.tenant_id is None
+    assert principal.tenant_id is not None
     assert session_principal is not None
-    assert session_principal.tenant_id is None
-    assert profile["current_tenant"] is None
+    assert session_principal.tenant_id == principal.tenant_id
+    assert profile["current_tenant"] is not None
+    assert profile["current_tenant"]["slug"] == DEFAULT_TENANT_SLUG
     assert any(item["slug"] == DEFAULT_TENANT_SLUG for item in profile["available_tenants"])
 
 
-def test_register_user_can_create_tenant_and_switch_into_it(service: InventoryService) -> None:
+def test_register_user_auto_creates_default_tenant_and_can_switch(service: InventoryService) -> None:
     principal, session_token = service.register_user(
         {
             "display_name": "测试成员",
@@ -53,13 +54,20 @@ def test_register_user_can_create_tenant_and_switch_into_it(service: InventorySe
 
     registered_principal = service.get_principal_for_session(session_token)
     assert registered_principal is not None
-    assert registered_principal.tenant_id is None
+    assert principal.tenant_id is not None
+    assert registered_principal.tenant_id == principal.tenant_id
+    assert principal.tenant_name == "测试成员 的默认租户"
+    assert principal.tenant_slug == "member-a-default"
+
+    initial_profile = service.get_auth_profile(principal)
+    assert initial_profile["current_tenant"] is not None
+    assert initial_profile["current_tenant"]["slug"] == "member-a-default"
+    assert initial_profile["available_tenants"][0]["is_owner"] is True
 
     result = service.create_tenant(
         registered_principal,
         {
             "name": "华东分部",
-            "slug": "east-branch",
         },
     )
     switched = service.switch_current_tenant(
@@ -69,9 +77,98 @@ def test_register_user_can_create_tenant_and_switch_into_it(service: InventorySe
     )
     profile = service.get_auth_profile(switched)
 
-    assert result["tenant"]["slug"] == "east-branch"
-    assert profile["current_tenant"]["slug"] == "east-branch"
-    assert profile["available_tenants"][0]["is_owner"] is True
+    assert result["tenant"]["slug"] == "tenant"
+    assert profile["current_tenant"]["slug"] == "tenant"
+    assert any(item["slug"] == "member-a-default" for item in profile["available_tenants"])
+
+
+def test_switching_tenant_updates_last_used_tenant_for_next_login(service: InventoryService) -> None:
+    principal, session_token = service.register_user(
+        {
+            "display_name": "多租户成员",
+            "username": "multi_member",
+            "password": "password123",
+            "password_confirm": "password123",
+        }
+    )
+
+    first_tenant = service.create_tenant(
+        principal,
+        {
+            "name": "华北仓",
+        },
+    )
+    principal = service.switch_current_tenant(
+        session_token,
+        principal,
+        {"tenant_id": first_tenant["tenant"]["id"]},
+    )
+    second_tenant = service.create_tenant(
+        principal,
+        {
+            "name": "华南仓",
+        },
+    )
+    principal = service.switch_current_tenant(
+        session_token,
+        principal,
+        {"tenant_id": second_tenant["tenant"]["id"]},
+    )
+
+    relogin_principal, _ = service.authenticate_user(
+        {
+            "username": "multi_member",
+            "password": "password123",
+        }
+    )
+
+    assert principal.tenant_slug == "tenant-2"
+    assert relogin_principal.tenant_slug == "tenant-2"
+    with get_connection(service.db_path) as connection:
+        last_tenant_id = connection.execute(
+            "SELECT last_tenant_id FROM users WHERE username = ?",
+            ("multi_member",),
+        ).fetchone()[0]
+    assert last_tenant_id == second_tenant["tenant"]["id"]
+
+
+def test_register_user_creates_unique_default_tenant_slug(service: InventoryService) -> None:
+    first_principal, _ = service.register_user(
+        {
+            "display_name": "成员一",
+            "username": "same-user",
+            "password": "password123",
+            "password_confirm": "password123",
+        }
+    )
+    second_principal, _ = service.register_user(
+        {
+            "display_name": "成员二",
+            "username": "same_user",
+            "password": "password123",
+            "password_confirm": "password123",
+        }
+    )
+
+    assert first_principal.tenant_slug == "same-user-default"
+    assert second_principal.tenant_slug == "same-user-default-2"
+
+
+def test_create_tenant_auto_generates_unique_slug_when_missing(service: InventoryService) -> None:
+    principal, _ = service.register_user(
+        {
+            "display_name": "租户用户",
+            "username": "tenant_slug_user",
+            "password": "password123",
+            "password_confirm": "password123",
+        }
+    )
+
+    first = service.create_tenant(principal, {"name": "North Warehouse"})
+    second = service.create_tenant(principal, {"name": "North Warehouse"})
+
+    assert first["tenant"]["slug"] == "north-warehouse"
+    assert second["tenant"]["slug"] == "north-warehouse-2"
 
 
 def test_user_can_request_join_tenant_and_owner_can_approve(service: InventoryService) -> None:
@@ -96,7 +193,7 @@ def test_user_can_request_join_tenant_and_owner_can_approve(service: InventorySe
         {"tenant_id": tenant_result["tenant"]["id"]},
     )
 
-    applicant_principal, applicant_session_token = service.register_user(
+    applicant_identity, applicant_session_token = service.register_user(
         {
             "display_name": "申请成员",
             "username": "tenant_member",
@@ -105,7 +202,7 @@ def test_user_can_request_join_tenant_and_owner_can_approve(service: InventorySe
         }
     )
     service.create_join_request(
-        applicant_principal,
+        applicant_identity,
         {
             "tenant_slug": "approval-tenant",
             "note": "需要进入租户处理库存。",
@@ -115,15 +212,14 @@ def test_user_can_request_join_tenant_and_owner_can_approve(service: InventorySe
     hub = service.get_tenant_hub(owner_principal)
     request_id = hub["pending_approvals"][0]["id"]
     review_result = service.review_join_request(owner_principal, request_id, True)
-    switched = service.switch_current_tenant(
-        applicant_session_token,
-        applicant_principal,
-        {"tenant_slug": "approval-tenant"},
-    )
+    restored = service.get_principal_for_session(applicant_session_token)
 
     assert review_result["message"].startswith("已同意")
-    assert switched.tenant_slug == "approval-tenant"
-    assert service.get_auth_profile(switched)["current_tenant"]["slug"] == "approval-tenant"
+    assert restored is not None
+    restored_profile = service.get_auth_profile(restored)
+    assert restored.tenant_slug == "tenant-member-default"
+    assert restored_profile["current_tenant"]["slug"] == "tenant-member-default"
+    assert any(item["slug"] == "approval-tenant" for item in restored_profile["available_tenants"])
 
 
 def test_create_sale_updates_stock_and_records_document(
