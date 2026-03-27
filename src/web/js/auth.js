@@ -1,120 +1,98 @@
-import { api } from "./api.js";
+import { api } from './api.js';
+import { toast } from './utils.js';
 
-const APP_PATH = "/app.html";
-const FLASH_KEY = "jiancang_flash";
+const FLASH_KEY = 'jiancang_flash';
 
-const refs = {
-  feedback: document.querySelector("#auth-feedback"),
-  loginForm: document.querySelector("#login-form"),
-  registerForm: document.querySelector("#register-form"),
-  authTabButtons: Array.from(document.querySelectorAll("[data-auth-tab]")),
-  authPanels: Array.from(document.querySelectorAll("[data-auth-panel]")),
-};
-
-async function boot() {
+function boot() {
   bindEvents();
-  applyAuthTab("login");
-  consumeFlashMessage();
-  await restoreSession();
+  consumeFlash();
+  restoreSession();
 }
 
 function bindEvents() {
-  refs.loginForm.addEventListener("submit", handleLoginSubmit);
-  refs.registerForm.addEventListener("submit", handleRegisterSubmit);
-
-  document.addEventListener("click", (event) => {
-    const authTab = event.target.closest("[data-auth-tab]");
-    if (!authTab) {
-      return;
-    }
-    applyAuthTab(authTab.dataset.authTab);
+  // Tab switching
+  document.querySelectorAll('.auth-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
+
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('register-form').addEventListener('submit', handleRegister);
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('login-form').hidden = tab !== 'login';
+  document.getElementById('register-form').hidden = tab !== 'register';
+  hideError();
 }
 
 async function restoreSession() {
   try {
-    await api.getMe();
+    await api.me();
     goToApp();
-  } catch (error) {
-    if (error.status !== 401) {
-      showFeedback(error.message || "会话检查失败，请稍后重试。");
-    }
+  } catch {
+    // Not logged in, stay on auth page
   }
 }
 
-async function handleLoginSubmit(event) {
-  event.preventDefault();
-  clearFeedback();
+async function handleLogin(e) {
+  e.preventDefault();
+  hideError();
+  const form = e.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
 
   try {
-    const auth = await api.login(formToObject(event.currentTarget));
+    const auth = await api.login(data);
     if (auth.current_tenant) {
-      setFlashMessage(`欢迎回来，已进入 ${auth.current_tenant.name}。`);
-      goToApp();
-      return;
+      setFlash(`欢迎回来，已进入 ${auth.current_tenant.name}`);
+    } else {
+      setFlash('登录成功，请先创建或加入一个团队');
     }
-    setFlashMessage("登录成功，请先创建租户或提交加入申请。");
     goToApp();
-  } catch (error) {
-    showFeedback(error.message || "登录失败。");
+  } catch (err) {
+    showError(err.message || '登录失败');
   }
 }
 
-async function handleRegisterSubmit(event) {
-  event.preventDefault();
-  clearFeedback();
+async function handleRegister(e) {
+  e.preventDefault();
+  hideError();
+  const form = e.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
 
   try {
-    const auth = await api.register(formToObject(event.currentTarget));
-    const tenantName = auth.current_tenant?.name || "默认租户";
-    setFlashMessage(`注册成功，已自动进入 ${tenantName}。`);
+    const auth = await api.register(data);
+    setFlash(`注册成功，已进入 ${auth.current_tenant?.name || '默认团队'}`);
     goToApp();
-  } catch (error) {
-    showFeedback(error.message || "注册失败。");
+  } catch (err) {
+    showError(err.message || '注册失败');
   }
 }
 
-function applyAuthTab(activeTab) {
-  refs.authTabButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.authTab === activeTab);
-  });
-
-  refs.authPanels.forEach((panel) => {
-    panel.hidden = panel.dataset.authPanel !== activeTab;
-  });
-
-  clearFeedback();
+function showError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.hidden = false;
 }
 
-function showFeedback(message) {
-  refs.feedback.textContent = message;
-  refs.feedback.hidden = false;
+function hideError() {
+  const el = document.getElementById('auth-error');
+  el.textContent = '';
+  el.hidden = true;
 }
 
-function clearFeedback() {
-  refs.feedback.textContent = "";
-  refs.feedback.hidden = true;
+function setFlash(msg) {
+  sessionStorage.setItem(FLASH_KEY, msg);
 }
 
-function setFlashMessage(message) {
-  window.sessionStorage.setItem(FLASH_KEY, message);
-}
-
-function consumeFlashMessage() {
-  const message = window.sessionStorage.getItem(FLASH_KEY) || "";
-  window.sessionStorage.removeItem(FLASH_KEY);
-  if (message) {
-    showFeedback(message);
-  }
-}
-
-function formToObject(form) {
-  const data = new FormData(form);
-  return Object.fromEntries(data.entries());
+function consumeFlash() {
+  const msg = sessionStorage.getItem(FLASH_KEY);
+  sessionStorage.removeItem(FLASH_KEY);
+  if (msg) toast(msg, 'success');
 }
 
 function goToApp() {
-  window.location.replace(APP_PATH);
+  window.location.replace('/app');
 }
 
 boot();

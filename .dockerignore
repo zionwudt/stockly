@@ -1,0 +1,10 @@
+.git
+.venv
+.pytest_cache
+.playwright-mcp
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store

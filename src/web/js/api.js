@@ -1,157 +1,63 @@
-const JSON_HEADERS = {
-  "Content-Type": "application/json",
-};
-
-async function request(path, options = {}) {
-  const response = await fetch(path, options);
-  const contentType = response.headers.get("content-type") || "";
-  const data = contentType.includes("application/json") ? await response.json() : null;
-
-  if (!response.ok) {
-    const message = data?.error || `请求失败: ${response.status}`;
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
+async function request(method, path, body) {
+  const opts = { method, credentials: 'same-origin' };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
   }
-
+  const res = await fetch(path, opts);
+  if (res.status === 401) {
+    window.location.href = '/auth';
+    throw new Error('Unauthorized');
+  }
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json') ? await res.json() : null;
+  if (!res.ok) throw new Error(data?.error || '请求失败');
   return data;
 }
 
+function get(path) { return request('GET', path); }
+function post(path, body) { return request('POST', path, body); }
+
 export const api = {
-  getMe() {
-    return request("/api/auth/me");
+  // Auth
+  login: (d) => post('/api/auth/login', d),
+  register: (d) => post('/api/auth/register', d),
+  logout: () => post('/api/auth/logout', {}),
+  me: () => get('/api/auth/me'),
+  switchTenant: (d) => post('/api/auth/switch-tenant', d),
+
+  // Tenant hub
+  tenantHub: () => get('/api/tenant-hub'),
+  createTenant: (d) => post('/api/tenants', d),
+  joinRequest: (d) => post('/api/tenant-join-requests', d),
+  approveJoin: (id) => post(`/api/tenant-join-requests/${id}/approve`, {}),
+  rejectJoin: (id) => post(`/api/tenant-join-requests/${id}/reject`, {}),
+
+  // Workspace data
+  summary: () => get('/api/summary'),
+  products: () => get('/api/products'),
+  suppliers: () => get('/api/suppliers'),
+  customers: () => get('/api/customers'),
+  stock: () => get('/api/stock'),
+  movements: (limit = 30) => get(`/api/movements?limit=${limit}`),
+  documents: (type, limit = 50) => {
+    const params = [];
+    if (type) params.push(`type=${type}`);
+    if (limit) params.push(`limit=${limit}`);
+    return get('/api/documents' + (params.length ? '?' + params.join('&') : ''));
   },
-  register(payload) {
-    return request("/api/auth/register", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
+  statistics: (start, end) => {
+    const params = [];
+    if (start) params.push(`start_date=${start}`);
+    if (end) params.push(`end_date=${end}`);
+    return get('/api/statistics' + (params.length ? '?' + params.join('&') : ''));
   },
-  login(payload) {
-    return request("/api/auth/login", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  logout() {
-    return request("/api/auth/logout", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({}),
-    });
-  },
-  switchTenant(payload) {
-    return request("/api/auth/switch-tenant", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  getTenantHub() {
-    return request("/api/tenant-hub");
-  },
-  createTenant(payload) {
-    return request("/api/tenants", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  createJoinRequest(payload) {
-    return request("/api/tenant-join-requests", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  approveJoinRequest(requestId) {
-    return request(`/api/tenant-join-requests/${requestId}/approve`, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({}),
-    });
-  },
-  rejectJoinRequest(requestId) {
-    return request(`/api/tenant-join-requests/${requestId}/reject`, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({}),
-    });
-  },
-  getSummary() {
-    return request("/api/summary");
-  },
-  getProducts() {
-    return request("/api/products");
-  },
-  createProduct(payload) {
-    return request("/api/products", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  getSuppliers() {
-    return request("/api/suppliers");
-  },
-  createSupplier(payload) {
-    return request("/api/suppliers", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  getCustomers() {
-    return request("/api/customers");
-  },
-  createCustomer(payload) {
-    return request("/api/customers", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  getStock() {
-    return request("/api/stock");
-  },
-  getMovements() {
-    return request("/api/movements?limit=30");
-  },
-  getDocuments() {
-    return request("/api/documents?limit=60");
-  },
-  getStatistics({ startDate, endDate } = {}) {
-    const params = new URLSearchParams();
-    if (startDate) {
-      params.set("start_date", startDate);
-    }
-    if (endDate) {
-      params.set("end_date", endDate);
-    }
-    const query = params.toString();
-    return request(`/api/statistics${query ? `?${query}` : ""}`);
-  },
-  createPurchase(payload) {
-    return request("/api/purchases", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  createSale(payload) {
-    return request("/api/sales", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
-  createAdjustment(payload) {
-    return request("/api/adjustments", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-  },
+
+  // Create operations
+  createProduct: (d) => post('/api/products', d),
+  createSupplier: (d) => post('/api/suppliers', d),
+  createCustomer: (d) => post('/api/customers', d),
+  createPurchase: (d) => post('/api/purchases', d),
+  createSale: (d) => post('/api/sales', d),
+  createAdjustment: (d) => post('/api/adjustments', d),
 };

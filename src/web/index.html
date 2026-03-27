@@ -1,87 +1,64 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>简仓 · 登录</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <section class="auth-screen">
-      <div class="auth-layout">
-        <section class="auth-card surface-card">
-          <div class="auth-card__head">
-            <p class="sheet-kicker">JianCang</p>
-            <h1>简仓</h1>
-            <p class="auth-copy">面向小团队的轻量进销存工作台。</p>
-          </div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>简仓 - 登录</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="auth-body">
+  <div class="auth-page">
+    <div class="auth-brand">
+      <div class="auth-logo">仓</div>
+      <h1 class="auth-title">简仓</h1>
+      <p class="auth-subtitle">小团队进销存工作台</p>
+    </div>
 
-          <div class="auth-mode-switch" role="tablist" aria-label="认证方式">
-            <button type="button" class="filter-pill is-active" data-auth-tab="login">登录</button>
-            <button type="button" class="filter-pill" data-auth-tab="register">注册</button>
-          </div>
-
-          <p id="auth-feedback" class="auth-feedback" hidden aria-live="polite"></p>
-
-          <section class="auth-panel" data-auth-panel="login">
-            <form id="login-form" class="compact-form">
-              <label>
-                <span>账号</span>
-                <input name="username" type="text" placeholder="请输入账号" autocomplete="username" required />
-              </label>
-              <label>
-                <span>密码</span>
-                <input
-                  name="password"
-                  type="password"
-                  placeholder="请输入密码"
-                  autocomplete="current-password"
-                  required
-                />
-              </label>
-
-              <button type="submit" class="primary-button wide-button">登录</button>
-            </form>
-          </section>
-
-          <section class="auth-panel" data-auth-panel="register" hidden>
-            <form id="register-form" class="compact-form">
-              <label>
-                <span>昵称</span>
-                <input name="display_name" type="text" placeholder="请输入昵称" autocomplete="name" />
-              </label>
-              <label>
-                <span>账号</span>
-                <input
-                  name="username"
-                  type="text"
-                  placeholder="3-32 位字母、数字、下划线"
-                  autocomplete="username"
-                  required
-                />
-              </label>
-              <label>
-                <span>密码</span>
-                <input name="password" type="password" placeholder="至少 8 位" autocomplete="new-password" required />
-              </label>
-              <label>
-                <span>确认密码</span>
-                <input
-                  name="password_confirm"
-                  type="password"
-                  placeholder="请再次输入密码"
-                  autocomplete="new-password"
-                  required
-                />
-              </label>
-
-              <button type="submit" class="secondary-button wide-button">注册账号</button>
-            </form>
-          </section>
-        </section>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">登录</button>
+        <button class="auth-tab" data-tab="register">注册</button>
       </div>
-    </section>
 
-    <script type="module" src="/js/auth.js"></script>
-  </body>
+      <div id="auth-error" class="auth-error" hidden></div>
+
+      <form id="login-form" class="auth-form">
+        <div class="form-field">
+          <label for="login-username">账号</label>
+          <input id="login-username" name="username" type="text" placeholder="请输入账号" autocomplete="username" required>
+        </div>
+        <div class="form-field">
+          <label for="login-password">密码</label>
+          <input id="login-password" name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">登录</button>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden>
+        <div class="form-field">
+          <label for="reg-display">昵称</label>
+          <input id="reg-display" name="display_name" type="text" placeholder="请输入昵称" autocomplete="name">
+        </div>
+        <div class="form-field">
+          <label for="reg-username">账号</label>
+          <input id="reg-username" name="username" type="text" placeholder="3-32 位字母、数字、下划线" autocomplete="username" required>
+        </div>
+        <div class="form-field">
+          <label for="reg-password">密码</label>
+          <input id="reg-password" name="password" type="password" placeholder="至少 8 位" autocomplete="new-password" required>
+        </div>
+        <div class="form-field">
+          <label for="reg-confirm">确认密码</label>
+          <input id="reg-confirm" name="password_confirm" type="password" placeholder="请再次输入密码" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">注册</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script type="module" src="/js/auth.js"></script>
+</body>
 </html>

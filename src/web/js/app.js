@@ -1,719 +1,144 @@
-import { api } from "./api.js";
-import { appendLineItem, removeLineItem, renderApp, showToast } from "./ui.js";
+import { api } from './api.js';
+import * as router from './router.js';
+import { getState, setState, loadAuth, loadTenantHub, loadWorkspace } from './store.js';
+import { toast } from './utils.js';
 
-const AUTH_PATH = "/";
-const FLASH_KEY = "jiancang_flash";
+// Page modules
+import * as home from './pages/home.js';
+import * as inventory from './pages/inventory.js';
+import * as documents from './pages/documents.js';
+import * as more from './pages/more.js';
+import * as products from './pages/products.js';
+import * as suppliers from './pages/suppliers.js';
+import * as customers from './pages/customers.js';
+import * as tenants from './pages/tenants.js';
+import * as stats from './pages/stats.js';
+import * as purchase from './pages/purchase.js';
+import * as sale from './pages/sale.js';
+import * as adjustment from './pages/adjustment.js';
 
-const state = {
-  auth: null,
-  tenantHub: null,
-  summary: null,
-  statistics: null,
-  products: [],
-  suppliers: [],
-  customers: [],
-  stock: [],
-  movements: [],
-  documents: [],
-  ui: {
-    activeView: "inventory",
-    inventoryQuery: "",
-    inventoryFilter: "all",
-    documentFilter: "all",
-    statsPreset: "last6Months",
-    statsStartDate: "",
-    statsEndDate: "",
-    activeMoreTab: "menu",
-    activeActionTab: "create",
-    composerOpen: false,
-    activeComposerType: "purchase",
-    composerPrefillProductId: null,
-  },
-};
+const FLASH_KEY = 'jiancang_flash';
+const AUTH_PATH = '/';
 
-const refs = {
-  appShell: document.querySelector("#app-shell"),
-  tabbar: document.querySelector("#app-tabbar"),
-  tenantButton: document.querySelector("#tenant-button"),
-  refreshButton: document.querySelector("#refresh-button"),
-  logoutButton: document.querySelector("#logout-button"),
-  inventorySearch: document.querySelector("#inventory-search"),
-  statsRangeForm: document.querySelector("#stats-range-form"),
-  statsStartDate: document.querySelector("#stats-start-date"),
-  statsEndDate: document.querySelector("#stats-end-date"),
-  composerTrigger: document.querySelector("#composer-trigger"),
-  tenantCreateForm: document.querySelector("#tenant-create-form"),
-  tenantJoinForm: document.querySelector("#tenant-join-form"),
-  productForm: document.querySelector("#product-form"),
-  supplierForm: document.querySelector("#supplier-form"),
-  customerForm: document.querySelector("#customer-form"),
-  purchaseForm: document.querySelector("#purchase-form"),
-  saleForm: document.querySelector("#sale-form"),
-  adjustmentForm: document.querySelector("#adjustment-form"),
+// Route definitions
+const ROUTES = {
+  '/':           { module: home,       title: '简仓',     tab: true },
+  '/inventory':  { module: inventory,  title: '库存',     tab: true },
+  '/documents':  { module: documents,  title: '单据',     tab: true },
+  '/more':       { module: more,       title: '更多',     tab: true },
+  '/products':   { module: products,   title: '商品管理', parent: '/more' },
+  '/suppliers':  { module: suppliers,  title: '供应商',   parent: '/more' },
+  '/customers':  { module: customers,  title: '客户',     parent: '/more' },
+  '/tenants':    { module: tenants,    title: '团队管理', parent: '/more' },
+  '/stats':      { module: stats,      title: '统计分析', parent: '/more' },
+  '/purchase':   { module: purchase,   title: '采购入库', parent: '/' },
+  '/sale':       { module: sale,       title: '销售出库', parent: '/' },
+  '/adjustment': { module: adjustment, title: '库存调整', parent: '/' },
 };
 
 async function boot() {
   bindViewportOffset();
-  bindEvents();
-  await restoreSession();
+
+  try {
+    await loadAuth();
+    await loadTenantHub();
+
+    const { auth } = getState();
+    if (auth?.current_tenant) {
+      await loadWorkspace();
+    }
+  } catch (err) {
+    if (err.message === 'Unauthorized') return;
+    redirectToAuth(err.message || '会话恢复失败');
+    return;
+  }
+
+  // Register routes
+  for (const [path, config] of Object.entries(ROUTES)) {
+    router.register(path, config);
+  }
+
+  // Start router
+  const container = document.getElementById('page');
+  const title = document.getElementById('header-title');
+  const backBtn = document.getElementById('header-back');
+  const tabBar = document.getElementById('tab-bar');
+
+  backBtn.addEventListener('click', () => router.back());
+
+  router.start(container, title, backBtn, tabBar);
+
+  // If no tenant, force to tenant management
+  const { auth } = getState();
+  if (!auth?.current_tenant) {
+    router.navigate('/tenants');
+  }
+
+  // Consume flash message
+  const flash = consumeFlash();
+  if (flash) toast(flash, 'success');
 }
 
 function bindViewportOffset() {
   const update = () => {
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      document.documentElement.style.setProperty("--viewport-offset-bottom", "0px");
-      return;
-    }
-
-    const bottomOffset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-    document.documentElement.style.setProperty("--viewport-offset-bottom", `${Math.round(bottomOffset)}px`);
+    const vp = window.visualViewport;
+    if (!vp) return;
+    const offset = Math.max(0, window.innerHeight - vp.height - vp.offsetTop);
+    document.documentElement.style.setProperty('--viewport-offset-bottom', `${Math.round(offset)}px`);
   };
-
   update();
-  window.addEventListener("resize", update, { passive: true });
-
-  if (!window.visualViewport) {
-    return;
-  }
-
-  window.visualViewport.addEventListener("resize", update, { passive: true });
-  window.visualViewport.addEventListener("scroll", update, { passive: true });
-}
-
-function bindEvents() {
-  refs.tenantButton.addEventListener("click", openTenantCenter);
-  refs.refreshButton.addEventListener("click", () => refreshApp("数据已同步。"));
-  refs.logoutButton.addEventListener("click", handleLogout);
-  refs.composerTrigger.addEventListener("click", () => openComposer("purchase"));
-  refs.tenantCreateForm.addEventListener("submit", handleTenantCreateSubmit);
-  refs.tenantJoinForm.addEventListener("submit", handleTenantJoinSubmit);
-  refs.inventorySearch.addEventListener("input", (event) => {
-    state.ui.inventoryQuery = event.currentTarget.value.trim();
-    renderApp(state);
-  });
-  refs.statsRangeForm.addEventListener("submit", handleStatisticsRangeSubmit);
-
-  refs.productForm.addEventListener("submit", handleProductSubmit);
-  refs.supplierForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "supplier"));
-  refs.customerForm.addEventListener("submit", (event) => handlePartnerSubmit(event, "customer"));
-  refs.purchaseForm.addEventListener("submit", (event) => handleDocumentSubmit(event, "purchase"));
-  refs.saleForm.addEventListener("submit", (event) => handleDocumentSubmit(event, "sale"));
-  refs.adjustmentForm.addEventListener("submit", handleAdjustmentSubmit);
-
-  document.addEventListener("click", (event) => {
-    const addButton = event.target.closest("[data-add-row]");
-    if (addButton) {
-      appendLineItem(addButton.dataset.addRow, state.products);
-      return;
-    }
-
-    const tenantTab = event.target.closest("[data-tenant-tab]");
-    if (tenantTab) {
-      state.ui.activeActionTab = tenantTab.dataset.tenantTab;
-      renderApp(state);
-      return;
-    }
-
-    const removeButton = event.target.closest("[data-remove-row]");
-    if (removeButton) {
-      removeLineItem(removeButton);
-      return;
-    }
-
-    const viewButton = event.target.closest("[data-view-btn]");
-    if (viewButton) {
-      setActiveView(viewButton.dataset.viewBtn);
-      return;
-    }
-
-    const statsPreset = event.target.closest("[data-stats-preset]");
-    if (statsPreset) {
-      void handleStatisticsPreset(statsPreset.dataset.statsPreset);
-      return;
-    }
-
-    const stockFilter = event.target.closest("[data-stock-filter]");
-    if (stockFilter) {
-      state.ui.inventoryFilter = stockFilter.dataset.stockFilter;
-      renderApp(state);
-      return;
-    }
-
-    const documentFilter = event.target.closest("[data-document-filter]");
-    if (documentFilter) {
-      state.ui.documentFilter = documentFilter.dataset.documentFilter;
-      renderApp(state);
-      return;
-    }
-
-    const moreTab = event.target.closest("[data-more-tab]");
-    if (moreTab) {
-      state.ui.activeMoreTab = moreTab.dataset.moreTab;
-      state.ui.activeView = "more";
-      renderApp(state);
-      return;
-    }
-
-    const moreBack = event.target.closest("[data-more-back]");
-    if (moreBack) {
-      state.ui.activeMoreTab = state.auth?.current_tenant ? "menu" : "tenants";
-      renderApp(state);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    const enterTenantButton = event.target.closest("[data-enter-tenant]");
-    if (enterTenantButton) {
-      const tenantId = Number(enterTenantButton.dataset.enterTenant);
-      const tenant = getAccessibleTenants().find((item) => Number(item.id) === tenantId);
-      if (tenant) {
-        void enterTenant(tenant);
-      }
-      return;
-    }
-
-    const approveButton = event.target.closest("[data-approve-request]");
-    if (approveButton) {
-      void handleJoinRequestDecision(Number(approveButton.dataset.approveRequest), true);
-      return;
-    }
-
-    const rejectButton = event.target.closest("[data-reject-request]");
-    if (rejectButton) {
-      void handleJoinRequestDecision(Number(rejectButton.dataset.rejectRequest), false);
-      return;
-    }
-
-    const composerTab = event.target.closest("[data-composer-tab]");
-    if (composerTab) {
-      state.ui.activeComposerType = composerTab.dataset.composerTab;
-      renderApp(state);
-      applyComposerPrefill();
-      return;
-    }
-
-    const closeComposer = event.target.closest("[data-close-composer]");
-    if (closeComposer) {
-      closeComposerSheet();
-      return;
-    }
-
-    const quickDoc = event.target.closest("[data-quick-doc]");
-    if (quickDoc) {
-      openComposer(quickDoc.dataset.quickDoc, Number(quickDoc.dataset.productId));
-    }
-  });
-
-  document.addEventListener("change", (event) => {
-    const productSelect = event.target.closest(".line-item select[name='product_id']");
-    if (productSelect) {
-      syncLineItemPrice(productSelect);
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.ui.composerOpen) {
-      closeComposerSheet();
-    }
-  });
-}
-
-async function restoreSession() {
-  try {
-    await loadAppState();
-    showAppShell();
-    renderApp(state);
-    applyComposerPrefill();
-    const flashMessage = consumeFlashMessage();
-    if (flashMessage) {
-      showToast(flashMessage);
-    }
-  } catch (error) {
-    if (error.status === 401) {
-      redirectToAuth();
-      return;
-    }
-    redirectToAuth(error.message || "会话恢复失败。");
+  window.addEventListener('resize', update, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', update, { passive: true });
+    window.visualViewport.addEventListener('scroll', update, { passive: true });
   }
 }
 
-async function refreshApp(successMessage = "") {
-  try {
-    await loadAppState();
-    showAppShell();
-    renderApp(state);
-    applyComposerPrefill();
-    if (successMessage) {
-      showToast(successMessage);
-    }
-  } catch (error) {
-    if (error.status === 401) {
-      await handleUnauthorized();
-      return;
-    }
-    showToast(error.message || "加载数据失败。");
-  }
+function consumeFlash() {
+  const msg = sessionStorage.getItem(FLASH_KEY);
+  sessionStorage.removeItem(FLASH_KEY);
+  return msg;
 }
 
-async function loadAppState() {
-  const [auth, tenantHub] = await Promise.all([api.getMe(), api.getTenantHub()]);
-  state.auth = auth;
-  state.tenantHub = tenantHub;
-  ensureStatisticsRange();
-
-  if (!auth.current_tenant) {
-    clearDomainState();
-    normalizeUiState();
-    return;
-  }
-
-  await loadWorkspaceData();
-  normalizeUiState();
-}
-
-async function loadWorkspaceData() {
-  ensureStatisticsRange();
-  const [summary, products, suppliers, customers, stock, movements, documents, statistics] = await Promise.all([
-    api.getSummary(),
-    api.getProducts(),
-    api.getSuppliers(),
-    api.getCustomers(),
-    api.getStock(),
-    api.getMovements(),
-    api.getDocuments(),
-    api.getStatistics({
-      startDate: state.ui.statsStartDate,
-      endDate: state.ui.statsEndDate,
-    }),
-  ]);
-
-  state.summary = summary;
-  state.statistics = statistics;
-  state.products = products;
-  state.suppliers = suppliers;
-  state.customers = customers;
-  state.stock = stock;
-  state.movements = movements;
-  state.documents = documents;
-}
-
-async function handleLogout() {
-  try {
-    await api.logout();
-  } catch (error) {
-    showToast(error.message || "退出登录失败。");
-  } finally {
-    redirectToAuth();
-  }
-}
-
-async function handleTenantCreateSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    const result = await api.createTenant(formToObject(form));
-    form.reset();
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "tenants";
-    state.ui.activeActionTab = "create";
-    await refreshApp(result.message || "租户已创建。");
-  } catch (error) {
-    showToast(error.message || "创建租户失败。");
-  }
-}
-
-async function handleTenantJoinSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    const result = await api.createJoinRequest(formToObject(form));
-    form.reset();
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "tenants";
-    state.ui.activeActionTab = "join";
-    await refreshApp(result.message || "已提交加入申请，请等待处理。");
-  } catch (error) {
-    showToast(error.message || "提交加入申请失败。");
-  }
-}
-
-async function handleJoinRequestDecision(requestId, approved) {
-  try {
-    const result = approved ? await api.approveJoinRequest(requestId) : await api.rejectJoinRequest(requestId);
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "tenants";
-    await refreshApp(result.message || (approved ? "已同意申请。" : "已拒绝申请。"));
-  } catch (error) {
-    showToast(error.message || "处理申请失败。");
-  }
-}
-
-async function enterTenant(tenant) {
-  if (tenant.is_current) {
-    showToast(`当前正在使用 ${tenant.name}。`);
-    return;
-  }
-
-  try {
-    await api.switchTenant({ tenant_id: tenant.id });
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "tenants";
-    await refreshApp(`已切换到 ${tenant.name}。`);
-  } catch (error) {
-    showToast(error.message || "切换租户失败。");
-  }
-}
-
-async function handleProductSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-
-  try {
-    await api.createProduct(formToObject(form));
-    form.reset();
-    form.elements.unit.value = "件";
-    form.elements.purchase_price.value = "0";
-    form.elements.sale_price.value = "0";
-    form.elements.safety_stock.value = "0";
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "products";
-    await refreshApp("商品已创建。");
-  } catch (error) {
-    showToast(error.message || "新增商品失败。");
-  }
-}
-
-async function handlePartnerSubmit(event, partnerType) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = formToObject(form);
-  const action = partnerType === "supplier" ? api.createSupplier : api.createCustomer;
-
-  try {
-    await action(payload);
-    form.reset();
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = partnerType === "supplier" ? "suppliers" : "customers";
-    await refreshApp(partnerType === "supplier" ? "供应商已创建。" : "客户已创建。");
-  } catch (error) {
-    showToast(error.message || "保存往来单位失败。");
-  }
-}
-
-async function handleDocumentSubmit(event, docType) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = {
-    partner_id: Number(form.elements.partner_id.value),
-    note: form.elements.note.value.trim(),
-    items: collectLineItems(form),
-  };
-
-  try {
-    if (docType === "purchase") {
-      await api.createPurchase(payload);
-    } else {
-      await api.createSale(payload);
-    }
-    resetDocumentForm(form, docType);
-    closeComposerSheet();
-    state.ui.activeView = "documents";
-    state.ui.documentFilter = docType;
-    await refreshApp(docType === "purchase" ? "采购入库完成。" : "销售出库完成。");
-  } catch (error) {
-    showToast(error.message || "提交单据失败。");
-  }
-}
-
-async function handleAdjustmentSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = {
-    product_id: Number(form.elements.product_id.value),
-    quantity_delta: Number(form.elements.quantity_delta.value),
-    reason: form.elements.reason.value.trim(),
-    note: form.elements.note.value.trim(),
-  };
-
-  try {
-    await api.createAdjustment(payload);
-    form.reset();
-    closeComposerSheet();
-    state.ui.activeView = "documents";
-    state.ui.documentFilter = "adjustment";
-    await refreshApp("库存调整完成。");
-  } catch (error) {
-    showToast(error.message || "库存调整失败。");
-  }
-}
-
-async function handleStatisticsPreset(preset) {
-  if (!state.auth?.current_tenant) {
-    openTenantCenter();
-    showToast("请先创建租户或等待加入申请通过。");
-    return;
-  }
-
-  const range = buildStatisticsRange(preset);
-  state.ui.statsPreset = preset;
-  state.ui.statsStartDate = range.startDate;
-  state.ui.statsEndDate = range.endDate;
-  state.ui.activeView = "stats";
-  renderApp(state);
-  await refreshStatistics("统计区间已更新。");
-}
-
-async function handleStatisticsRangeSubmit(event) {
-  event.preventDefault();
-  const startDate = refs.statsStartDate.value;
-  const endDate = refs.statsEndDate.value;
-
-  if (!startDate || !endDate) {
-    showToast("请选择开始和结束日期。");
-    return;
-  }
-  if (startDate > endDate) {
-    showToast("开始日期不能晚于结束日期。");
-    return;
-  }
-
-  state.ui.statsStartDate = startDate;
-  state.ui.statsEndDate = endDate;
-  state.ui.statsPreset = detectStatisticsPreset(startDate, endDate);
-  state.ui.activeView = "stats";
-  renderApp(state);
-  await refreshStatistics("统计区间已更新。");
-}
-
-function setActiveView(viewName) {
-  state.ui.activeView = viewName;
-  if (viewName === "more") {
-    state.ui.activeMoreTab = state.auth?.current_tenant ? "menu" : "tenants";
-  }
-  renderApp(state);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function openComposer(type = "purchase", productId = null) {
-  if (!state.auth?.current_tenant) {
-    openTenantCenter();
-    showToast("请先创建租户或等待加入申请通过。");
-    return;
-  }
-  state.ui.composerOpen = true;
-  state.ui.activeComposerType = type;
-  state.ui.composerPrefillProductId = productId || null;
-  renderApp(state);
-  applyComposerPrefill();
-}
-
-function closeComposerSheet(resetPrefill = true) {
-  state.ui.composerOpen = false;
-  if (resetPrefill) {
-    state.ui.composerPrefillProductId = null;
-  }
-  renderApp(state);
-}
-
-async function handleUnauthorized() {
-  clearAllState();
-  closeComposerSheet();
-  redirectToAuth("登录已失效，请重新登录。");
-}
-
-function showAppShell() {
-  refs.appShell.hidden = false;
-  refs.tabbar.hidden = false;
-}
-
-function clearDomainState() {
-  state.tenantHub = null;
-  state.summary = null;
-  state.statistics = null;
-  state.products = [];
-  state.suppliers = [];
-  state.customers = [];
-  state.stock = [];
-  state.movements = [];
-  state.documents = [];
-}
-
-function clearAllState() {
-  state.auth = null;
-  clearDomainState();
-}
-
-function normalizeUiState() {
-  ensureStatisticsRange();
-  if (!["menu", "tenants", "products", "suppliers", "customers"].includes(state.ui.activeMoreTab)) {
-    state.ui.activeMoreTab = "menu";
-  }
-  if (!["create", "join"].includes(state.ui.activeActionTab)) {
-    state.ui.activeActionTab = "create";
-  }
-  if (!state.auth?.current_tenant) {
-    state.ui.activeView = "more";
-    state.ui.activeMoreTab = "tenants";
-    state.ui.composerOpen = false;
-    state.ui.composerPrefillProductId = null;
-  }
-}
-
-async function refreshStatistics(successMessage = "") {
-  try {
-    state.statistics = await api.getStatistics({
-      startDate: state.ui.statsStartDate,
-      endDate: state.ui.statsEndDate,
-    });
-    renderApp(state);
-    if (successMessage) {
-      showToast(successMessage);
-    }
-  } catch (error) {
-    if (error.status === 401) {
-      await handleUnauthorized();
-      return;
-    }
-    showToast(error.message || "统计加载失败。");
-  }
-}
-
-function applyComposerPrefill() {
-  if (!state.ui.composerOpen) {
-    return;
-  }
-  const productId = state.ui.composerPrefillProductId;
-  if (!productId) {
-    return;
-  }
-
-  if (state.ui.activeComposerType === "adjustment") {
-    refs.adjustmentForm.elements.product_id.value = String(productId);
-    return;
-  }
-
-  const form = state.ui.activeComposerType === "purchase" ? refs.purchaseForm : refs.saleForm;
-  const firstRow = form.querySelector(".line-item");
-  const select = firstRow?.querySelector("select[name='product_id']");
-  if (!select) {
-    return;
-  }
-  select.value = String(productId);
-  syncLineItemPrice(select);
-}
-
-function formToObject(form) {
-  const data = new FormData(form);
-  return Object.fromEntries(data.entries());
-}
-
-function collectLineItems(form) {
-  const rows = Array.from(form.querySelectorAll(".line-item"));
-  return rows.map((row) => ({
-    product_id: Number(row.querySelector("select[name='product_id']").value),
-    quantity: Number(row.querySelector("input[name='quantity']").value),
-    unit_price: Number(row.querySelector("input[name='unit_price']").value),
-  }));
-}
-
-function resetDocumentForm(form, docType) {
-  form.reset();
-  const itemsContainer = form.querySelector(".line-items");
-  if (itemsContainer) {
-    itemsContainer.innerHTML = "";
-    appendLineItem(docType, state.products);
-  }
-  state.ui.composerPrefillProductId = null;
-}
-
-function syncLineItemPrice(select) {
-  const row = select.closest(".line-item");
-  if (!row) {
-    return;
-  }
-  const product = state.products.find((item) => String(item.id) === select.value);
-  if (!product) {
-    return;
-  }
-  const priceInput = row.querySelector("input[name='unit_price']");
-  const kind = row.dataset.kind;
-  const suggestedPrice = kind === "purchase" ? Number(product.purchase_price || 0) : Number(product.sale_price || 0);
-  priceInput.value = suggestedPrice.toFixed(2);
-}
-
-function ensureStatisticsRange() {
-  if (state.ui.statsStartDate && state.ui.statsEndDate) {
-    return;
-  }
-  const range = buildStatisticsRange(state.ui.statsPreset || "last6Months");
-  state.ui.statsPreset = state.ui.statsPreset || "last6Months";
-  state.ui.statsStartDate = range.startDate;
-  state.ui.statsEndDate = range.endDate;
-}
-
-function buildStatisticsRange(preset) {
-  const today = new Date();
-  let startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-
-  if (preset === "last3Months") {
-    startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-  } else if (preset === "last6Months") {
-    startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-  } else if (preset === "thisYear") {
-    startDate = new Date(today.getFullYear(), 0, 1);
-  }
-
-  return {
-    startDate: toDateInputValue(startDate),
-    endDate: toDateInputValue(today),
-  };
-}
-
-function detectStatisticsPreset(startDate, endDate) {
-  const presets = ["thisMonth", "last3Months", "last6Months", "thisYear"];
-  for (const preset of presets) {
-    const range = buildStatisticsRange(preset);
-    if (range.startDate === startDate && range.endDate === endDate) {
-      return preset;
-    }
-  }
-  return "custom";
-}
-
-function toDateInputValue(value) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function redirectToAuth(message = "") {
-  if (message) {
-    window.sessionStorage.setItem(FLASH_KEY, message);
-  } else {
-    window.sessionStorage.removeItem(FLASH_KEY);
-  }
+function redirectToAuth(message = '') {
+  if (message) sessionStorage.setItem(FLASH_KEY, message);
   window.location.replace(AUTH_PATH);
 }
 
-function openTenantCenter() {
-  state.ui.activeView = "more";
-  state.ui.activeMoreTab = "tenants";
-  renderApp(state);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function consumeFlashMessage() {
-  const message = window.sessionStorage.getItem(FLASH_KEY) || "";
-  window.sessionStorage.removeItem(FLASH_KEY);
-  return message;
-}
-
-function getAccessibleTenants() {
-  return state.tenantHub?.accessible_tenants || state.auth?.available_tenants || [];
-}
+// Expose globally for page modules
+window.__app = {
+  refreshData: async function(successMsg) {
+    try {
+      await loadAuth();
+      await loadTenantHub();
+      const { auth } = getState();
+      if (auth?.current_tenant) {
+        await loadWorkspace();
+      }
+      // Re-mount current page
+      const hash = router.currentPath();
+      const route = ROUTES[hash];
+      if (route) {
+        const container = document.getElementById('page');
+        container.innerHTML = '';
+        route.module.mount(container);
+      }
+      if (successMsg) toast(successMsg, 'success');
+    } catch (err) {
+      if (err.message === 'Unauthorized') {
+        redirectToAuth('登录已失效，请重新登录');
+        return;
+      }
+      toast(err.message || '刷新数据失败', 'error');
+    }
+  },
+  logout: async function() {
+    try {
+      await api.logout();
+    } catch { /* ignore */ }
+    redirectToAuth();
+  },
+  navigate: router.navigate,
+};
 
 boot();
