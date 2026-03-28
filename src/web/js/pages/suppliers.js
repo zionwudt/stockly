@@ -60,6 +60,7 @@ function renderList(container, suppliers) {
         </div>
         ${s.note ? `<div class="list-item-note">${escapeHtml(s.note)}</div>` : ''}
       </div>
+      <button class="btn-delete" data-id="${s.id}" title="删除">✕</button>
     </div>
   `).join('');
 }
@@ -76,6 +77,21 @@ function bindEvents(container) {
       await window.__app.refreshData('供应商已创建');
     } catch (err) {
       toast(err.message || '新增供应商失败', 'error');
+    }
+  });
+
+  container.querySelector('#supplier-list').addEventListener('click', async (e) => {
+    const deleteBtn = e.target.closest('.btn-delete');
+    if (!deleteBtn) return;
+
+    const supplierId = deleteBtn.dataset.id;
+    if (!confirm('确定要删除此供应商吗？')) return;
+
+    try {
+      await api.deleteSupplier(supplierId);
+      await window.__app.refreshData('供应商已删除');
+    } catch (err) {
+      toast(err.message || '删除供应商失败', 'error');
     }
   });
 }

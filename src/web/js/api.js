@@ -17,6 +17,7 @@ async function request(method, path, body) {
 
 function get(path) { return request('GET', path); }
 function post(path, body) { return request('POST', path, body); }
+function del(path, body) { return request('DELETE', path, body); }
 
 export const api = {
   // Auth
@@ -60,4 +61,12 @@ export const api = {
   createPurchase: (d) => post('/api/purchases', d),
   createSale: (d) => post('/api/sales', d),
   createAdjustment: (d) => post('/api/adjustments', d),
+
+  // Delete operations (soft delete)
+  deleteProduct: (id) => del(`/api/products/${id}`, {}),
+  deleteSupplier: (id) => del(`/api/suppliers/${id}`, {}),
+  deleteCustomer: (id) => del(`/api/customers/${id}`, {}),
+
+  // Document void operation
+  voidDocument: (id, reason) => post(`/api/documents/${id}/void`, { reason }),
 };

@@ -84,6 +84,8 @@ SCHEMA_STATEMENTS = [
         sale_price REAL NOT NULL DEFAULT 0,
         safety_stock REAL NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
@@ -97,6 +99,8 @@ SCHEMA_STATEMENTS = [
         contact TEXT NOT NULL DEFAULT '',
         phone TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
@@ -110,6 +114,9 @@ SCHEMA_STATEMENTS = [
         partner_id INTEGER,
         note TEXT NOT NULL DEFAULT '',
         total_amount REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        voided_at TEXT,
+        void_reason TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id),
         FOREIGN KEY(partner_id) REFERENCES partners(id)
@@ -135,7 +142,7 @@ SCHEMA_STATEMENTS = [
         tenant_id INTEGER NOT NULL DEFAULT 1,
         product_id INTEGER NOT NULL,
         document_id INTEGER,
-        movement_type TEXT NOT NULL CHECK(movement_type IN ('purchase', 'sale', 'adjustment')),
+        movement_type TEXT NOT NULL,
         quantity_delta REAL NOT NULL,
         unit_price REAL NOT NULL DEFAULT 0,
         note TEXT NOT NULL DEFAULT '',
@@ -162,6 +169,9 @@ SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_partners_tenant_type ON partners(tenant_id, partner_type)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_tenant_doc_no ON documents(tenant_id, doc_no)",
     "CREATE INDEX IF NOT EXISTS idx_documents_tenant_type ON documents(tenant_id, doc_type)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_tenant_status ON documents(tenant_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_products_tenant_deleted ON products(tenant_id, is_deleted)",
+    "CREATE INDEX IF NOT EXISTS idx_partners_tenant_deleted_type ON partners(tenant_id, is_deleted, partner_type)",
     "CREATE INDEX IF NOT EXISTS idx_document_items_tenant_document ON document_items(tenant_id, document_id)",
     "CREATE INDEX IF NOT EXISTS idx_stock_movements_tenant_product ON stock_movements(tenant_id, product_id)",
 ]
@@ -169,7 +179,10 @@ SCHEMA_STATEMENTS = [
 INDEX_STATEMENTS = [
     statement
     for statement in SCHEMA_STATEMENTS
-    if statement.lstrip().startswith("CREATE INDEX") or statement.lstrip().startswith("CREATE UNIQUE INDEX")
+    if statement.lstrip().startswith("CREATE INDEX")
+    or statement.lstrip().startswith("CREATE UNIQUE INDEX")
 ]
 
-TABLE_STATEMENTS = [statement for statement in SCHEMA_STATEMENTS if statement not in INDEX_STATEMENTS]
+TABLE_STATEMENTS = [
+    statement for statement in SCHEMA_STATEMENTS if statement not in INDEX_STATEMENTS
+]

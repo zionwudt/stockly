@@ -70,7 +70,7 @@ function renderList(container, products) {
   }
 
   el.innerHTML = products.map(p => `
-    <div class="list-item">
+    <div class="list-item" data-id="${p.id}">
       <div class="list-item-main">
         <div class="list-item-title">${escapeHtml(p.name)}</div>
         <div class="list-item-desc">
@@ -84,6 +84,7 @@ function renderList(container, products) {
       <div class="list-item-right">
         <div class="font-num ${(p.on_hand || 0) <= (p.safety_stock || 0) && p.safety_stock > 0 ? 'text-danger' : ''}">${formatQuantity(p.on_hand || 0)}</div>
         <div class="list-item-sub">库存</div>
+        <button class="btn-delete" data-id="${p.id}" title="删除">✕</button>
       </div>
     </div>
   `).join('');
@@ -105,6 +106,21 @@ function bindEvents(container) {
       await window.__app.refreshData('商品已创建');
     } catch (err) {
       toast(err.message || '新增商品失败', 'error');
+    }
+  });
+
+  container.querySelector('#product-list').addEventListener('click', async (e) => {
+    const deleteBtn = e.target.closest('.btn-delete');
+    if (!deleteBtn) return;
+
+    const productId = deleteBtn.dataset.id;
+    if (!confirm('确定要删除此商品吗？')) return;
+
+    try {
+      await api.deleteProduct(productId);
+      await window.__app.refreshData('商品已删除');
+    } catch (err) {
+      toast(err.message || '删除商品失败', 'error');
     }
   });
 }

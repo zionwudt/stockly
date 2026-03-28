@@ -21,10 +21,18 @@ class StatisticsServiceMixin:
         start, end = self._resolve_statistics_range(start_date, end_date)
 
         with get_connection(self.db_path) as connection:
-            overview = self._statistics_overview(connection, context.tenant_id, start, end)
-            monthly_documents = self._statistics_monthly_documents(connection, context.tenant_id, start, end)
-            monthly_movements = self._statistics_monthly_movements(connection, context.tenant_id, start, end)
-            top_products = self._statistics_top_products(connection, context.tenant_id, start, end)
+            overview = self._statistics_overview(
+                connection, context.tenant_id, start, end
+            )
+            monthly_documents = self._statistics_monthly_documents(
+                connection, context.tenant_id, start, end
+            )
+            monthly_movements = self._statistics_monthly_movements(
+                connection, context.tenant_id, start, end
+            )
+            top_products = self._statistics_top_products(
+                connection, context.tenant_id, start, end
+            )
 
         purchase_amount = round(float(overview["purchase_amount"] or 0), 2)
         sale_amount = round(float(overview["sale_amount"] or 0), 2)
@@ -56,7 +64,9 @@ class StatisticsServiceMixin:
                 "sale_quantity": sale_quantity,
                 "adjustment_quantity": adjustment_quantity,
             },
-            "monthly": self._merge_monthly_statistics(monthly_documents, monthly_movements, start, end),
+            "monthly": self._merge_monthly_statistics(
+                monthly_documents, monthly_movements, start, end
+            ),
             "mix": [
                 {
                     "type": "sale",
@@ -90,7 +100,11 @@ class StatisticsServiceMixin:
     ) -> tuple[date, date]:
         today = date.today()
         end = self._parse_iso_date(end_date, "end_date") if end_date else today
-        start = self._parse_iso_date(start_date, "start_date") if start_date else self._shift_month_start(end, -(DEFAULT_STATISTICS_MONTH_WINDOW - 1))
+        start = (
+            self._parse_iso_date(start_date, "start_date")
+            if start_date
+            else self._shift_month_start(end, -(DEFAULT_STATISTICS_MONTH_WINDOW - 1))
+        )
         if start > end:
             raise ValidationError("start_date 不能晚于 end_date。")
         return start, end
@@ -115,12 +129,14 @@ class StatisticsServiceMixin:
                     SELECT COUNT(*)
                     FROM documents
                     WHERE tenant_id = ?
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS document_count,
                 (
                     SELECT COUNT(DISTINCT DATE(created_at))
                     FROM documents
                     WHERE tenant_id = ?
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS active_days,
                 (
@@ -128,6 +144,7 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND doc_type = 'purchase'
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS purchase_docs,
                 (
@@ -135,6 +152,7 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND doc_type = 'sale'
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS sale_docs,
                 (
@@ -142,6 +160,7 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND doc_type = 'adjustment'
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS adjustment_docs,
                 (
@@ -149,6 +168,7 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND doc_type = 'purchase'
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS purchase_amount,
                 (
@@ -156,6 +176,7 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND doc_type = 'sale'
+                      AND status = 'active'
                       AND DATE(created_at) BETWEEN ? AND ?
                 ) AS sale_amount,
                 (
@@ -229,6 +250,7 @@ class StatisticsServiceMixin:
                 SUM(CASE WHEN d.doc_type = 'adjustment' THEN 1 ELSE 0 END) AS adjustment_docs
             FROM documents d
             WHERE d.tenant_id = ?
+              AND d.status = 'active'
               AND DATE(d.created_at) BETWEEN ? AND ?
             GROUP BY month_key
             ORDER BY month_key ASC
@@ -366,12 +388,16 @@ class StatisticsServiceMixin:
             item = merged[row["month_key"]]
             item["purchase_quantity"] = round(float(row["purchase_quantity"] or 0), 2)
             item["sale_quantity"] = round(float(row["sale_quantity"] or 0), 2)
-            item["adjustment_quantity"] = round(float(row["adjustment_quantity"] or 0), 2)
+            item["adjustment_quantity"] = round(
+                float(row["adjustment_quantity"] or 0), 2
+            )
 
         return [
             {
                 **item,
-                "document_count": item["purchase_docs"] + item["sale_docs"] + item["adjustment_docs"],
+                "document_count": item["purchase_docs"]
+                + item["sale_docs"]
+                + item["adjustment_docs"],
                 "net_amount": round(item["sale_amount"] - item["purchase_amount"], 2),
             }
             for item in merged.values()

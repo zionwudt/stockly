@@ -10,7 +10,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .security import SESSION_DAYS
-from .services import InventoryService, RequestContext, SessionPrincipal, ValidationError
+from .services import (
+    InventoryService,
+    RequestContext,
+    SessionPrincipal,
+    ValidationError,
+)
 
 
 SESSION_COOKIE_NAME = "jiancang_session"
@@ -26,6 +31,39 @@ class JianCangHandler(BaseHTTPRequestHandler):
             self._handle_api_get(parsed.path, parse_qs(parsed.query))
             return
         self._serve_static(parsed.path)
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if not path.startswith("/api/"):
+            self._send_json({"error": "Not Found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        try:
+            payload = self._read_json_body()
+            if self._handle_auth_post(path, payload):
+                return
+            if self._handle_tenant_post(path, payload):
+                return
+
+            context = self._require_context()
+            if context is None:
+                return
+            if self._handle_workspace_delete(path, payload, context):
+                return
+
+            self._send_json({"error": "Not Found"}, status=HTTPStatus.NOT_FOUND)
+        except ValidationError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except json.JSONDecodeError:
+            self._send_json(
+                {"error": "请求体不是合法 JSON。"}, status=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as exc:
+            self._send_json(
+                {"error": f"服务器内部错误: {exc}"},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
@@ -51,9 +89,14 @@ class JianCangHandler(BaseHTTPRequestHandler):
         except ValidationError as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except json.JSONDecodeError:
-            self._send_json({"error": "请求体不是合法 JSON。"}, status=HTTPStatus.BAD_REQUEST)
+            self._send_json(
+                {"error": "请求体不是合法 JSON。"}, status=HTTPStatus.BAD_REQUEST
+            )
         except Exception as exc:  # pragma: no cover - 兜底错误
-            self._send_json({"error": f"服务器内部错误: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._send_json(
+                {"error": f"服务器内部错误: {exc}"},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     def log_message(self, format: str, *args) -> None:  # noqa: A003
         return
@@ -73,7 +116,10 @@ class JianCangHandler(BaseHTTPRequestHandler):
         except ValidationError as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except Exception as exc:  # pragma: no cover - 兜底错误
-            self._send_json({"error": f"服务器内部错误: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._send_json(
+                {"error": f"服务器内部错误: {exc}"},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     def _handle_auth_post(self, path: str, payload: dict) -> bool:
         if path == "/api/auth/register":
@@ -95,7 +141,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/logout":
             self.service.logout_session(self._session_token())
-            self._send_json({"message": "已退出登录"}, cookies=[self._clear_session_cookie()])
+            self._send_json(
+                {"message": "已退出登录"}, cookies=[self._clear_session_cookie()]
+            )
             return True
 
         if path != "/api/auth/switch-tenant":
@@ -104,7 +152,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
         principal = self._require_principal()
         if principal is None:
             return True
-        updated_principal = self.service.switch_current_tenant(self._session_token(), principal, payload)
+        updated_principal = self.service.switch_current_tenant(
+            self._session_token(), principal, payload
+        )
         self._send_json(self.service.get_auth_profile(updated_principal))
         return True
 
@@ -131,7 +181,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
             self._send_json(result, status=HTTPStatus.CREATED)
             return True
 
-        decision_match = re.fullmatch(r"/api/tenant-join-requests/(\d+)/(approve|reject)", path)
+        decision_match = re.fullmatch(
+            r"/api/tenant-join-requests/(\d+)/(approve|reject)", path
+        )
         if decision_match is None:
             return False
 
@@ -144,7 +196,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
         self._send_json(result)
         return True
 
-    def _handle_workspace_post(self, path: str, payload: dict, context: RequestContext) -> bool:
+    def _handle_workspace_post(
+        self, path: str, payload: dict, context: RequestContext
+    ) -> bool:
         if path == "/api/products":
             result = self.service.create_product(context, payload)
         elif path == "/api/suppliers":
@@ -158,10 +212,43 @@ class JianCangHandler(BaseHTTPRequestHandler):
         elif path == "/api/adjustments":
             result = self.service.create_adjustment(context, payload)
         else:
+            void_match = re.fullmatch(r"/api/documents/(\d+)/void", path)
+            if void_match:
+                document_id = int(void_match.group(1))
+                reason = payload.get("reason")
+                result = self.service.void_document(context, document_id, reason)
+                self._send_json(result)
+                return True
             return False
 
         self._send_json(result, status=HTTPStatus.CREATED)
         return True
+
+    def _handle_workspace_delete(
+        self, path: str, payload: dict, context: RequestContext
+    ) -> bool:
+        product_match = re.fullmatch(r"/api/products/(\d+)", path)
+        if product_match:
+            product_id = int(product_match.group(1))
+            result = self.service.delete_product(context, product_id)
+            self._send_json(result)
+            return True
+
+        supplier_match = re.fullmatch(r"/api/suppliers/(\d+)", path)
+        if supplier_match:
+            partner_id = int(supplier_match.group(1))
+            result = self.service.delete_partner(context, partner_id)
+            self._send_json(result)
+            return True
+
+        customer_match = re.fullmatch(r"/api/customers/(\d+)", path)
+        if customer_match:
+            partner_id = int(customer_match.group(1))
+            result = self.service.delete_partner(context, partner_id)
+            self._send_json(result)
+            return True
+
+        return False
 
     def _handle_identity_get(self, path: str) -> bool:
         if path == "/api/auth/me":
@@ -202,7 +289,9 @@ class JianCangHandler(BaseHTTPRequestHandler):
         elif path == "/api/documents":
             limit = int(query.get("limit", ["50"])[0])
             doc_type = query.get("type", [""])[0] or None
-            result = self.service.list_documents(context, doc_type=doc_type, limit=limit)
+            result = self.service.list_documents(
+                context, doc_type=doc_type, limit=limit
+            )
         elif path == "/api/statistics":
             result = self.service.get_statistics(
                 context,
@@ -260,7 +349,10 @@ class JianCangHandler(BaseHTTPRequestHandler):
         else:
             relative = clean_path.lstrip("/")
             file_path = (self.static_dir / relative).resolve()
-            if self.static_dir.resolve() not in file_path.parents and file_path != self.static_dir.resolve():
+            if (
+                self.static_dir.resolve() not in file_path.parents
+                and file_path != self.static_dir.resolve()
+            ):
                 self.send_error(HTTPStatus.FORBIDDEN)
                 return
 

@@ -34,13 +34,15 @@ class DocumentSupportMixin:
             )
         return items
 
-    def _product_exists(self, connection: sqlite3.Connection, tenant_id: int, product_id: int) -> None:
+    def _product_exists(
+        self, connection: sqlite3.Connection, tenant_id: int, product_id: int
+    ) -> None:
         row = connection.execute(
-            "SELECT id FROM products WHERE tenant_id = ? AND id = ?",
+            "SELECT id FROM products WHERE tenant_id = ? AND id = ? AND is_deleted = 0",
             (tenant_id, product_id),
         ).fetchone()
         if row is None:
-            raise ValidationError(f"商品不存在，product_id={product_id}")
+            raise ValidationError(f"商品不存在或已删除，product_id={product_id}")
 
     def _partner_id(
         self,
@@ -57,15 +59,17 @@ class DocumentSupportMixin:
             """
             SELECT id
             FROM partners
-            WHERE tenant_id = ? AND id = ? AND partner_type = ?
+            WHERE tenant_id = ? AND id = ? AND partner_type = ? AND is_deleted = 0
             """,
             (tenant_id, partner_id, partner_type),
         ).fetchone()
         if row is None:
-            raise ValidationError("往来单位不存在或类型不匹配。")
+            raise ValidationError("往来单位不存在、已删除或类型不匹配。")
         return partner_id
 
-    def _generate_doc_no(self, connection: sqlite3.Connection, tenant_id: int, doc_type: str) -> str:
+    def _generate_doc_no(
+        self, connection: sqlite3.Connection, tenant_id: int, doc_type: str
+    ) -> str:
         prefixes = {
             "purchase": "PO",
             "sale": "SO",
@@ -78,7 +82,9 @@ class DocumentSupportMixin:
         ).fetchone()[0]
         return f"{prefix}-{tenant_id:02d}-{count + 1:04d}"
 
-    def _stock_by_product(self, connection: sqlite3.Connection, tenant_id: int) -> dict[int, float]:
+    def _stock_by_product(
+        self, connection: sqlite3.Connection, tenant_id: int
+    ) -> dict[int, float]:
         rows = connection.execute(
             """
             SELECT product_id, ROUND(SUM(quantity_delta), 2) AS on_hand

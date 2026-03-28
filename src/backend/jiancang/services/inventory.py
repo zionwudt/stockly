@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from ..db import get_connection
 from .models import RequestContext, ValidationError
+
+
+def _db_now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 class InventoryQueryServiceMixin:
@@ -16,7 +21,7 @@ class InventoryQueryServiceMixin:
         FROM products p
         LEFT JOIN stock_movements m
             ON m.product_id = p.id AND m.tenant_id = p.tenant_id
-        WHERE p.tenant_id = ?
+        WHERE p.tenant_id = ? AND p.is_deleted = 0
         GROUP BY p.id
         ORDER BY p.created_at DESC, p.id DESC
         """
@@ -24,7 +29,26 @@ class InventoryQueryServiceMixin:
             rows = connection.execute(query, (context.tenant_id,)).fetchall()
         return [dict(row) for row in rows]
 
-    def create_product(self, context: RequestContext, payload: dict[str, Any]) -> dict[str, Any]:
+    def delete_product(
+        self, context: RequestContext, product_id: int
+    ) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            cursor = connection.execute(
+                "SELECT id FROM products WHERE id = ? AND tenant_id = ? AND is_deleted = 0",
+                (product_id, context.tenant_id),
+            )
+            if cursor.fetchone() is None:
+                raise ValidationError("商品不存在或已删除。")
+            connection.execute(
+                "UPDATE products SET is_deleted = 1, deleted_at = ? WHERE id = ?",
+                (_db_now(), product_id),
+            )
+            connection.commit()
+        return {"message": "商品已删除"}
+
+    def create_product(
+        self, context: RequestContext, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         sku = self._required_text(payload, "sku")
         name = self._required_text(payload, "name")
         category = self._text(payload, "category")
@@ -57,21 +81,42 @@ class InventoryQueryServiceMixin:
 
         return {"message": "商品已创建"}
 
-    def list_partners(self, context: RequestContext, partner_type: str) -> list[dict[str, Any]]:
+    def list_partners(
+        self, context: RequestContext, partner_type: str
+    ) -> list[dict[str, Any]]:
         self._validate_partner_type(partner_type)
         with get_connection(self.db_path) as connection:
             rows = connection.execute(
                 """
                 SELECT *
                 FROM partners
-                WHERE tenant_id = ? AND partner_type = ?
+                WHERE tenant_id = ? AND partner_type = ? AND is_deleted = 0
                 ORDER BY created_at DESC, id DESC
                 """,
                 (context.tenant_id, partner_type),
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def create_partner(self, context: RequestContext, partner_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def delete_partner(
+        self, context: RequestContext, partner_id: int
+    ) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            cursor = connection.execute(
+                "SELECT id FROM partners WHERE id = ? AND tenant_id = ? AND is_deleted = 0",
+                (partner_id, context.tenant_id),
+            )
+            if cursor.fetchone() is None:
+                raise ValidationError("往来单位不存在或已删除。")
+            connection.execute(
+                "UPDATE partners SET is_deleted = 1, deleted_at = ? WHERE id = ?",
+                (_db_now(), partner_id),
+            )
+            connection.commit()
+        return {"message": "往来单位已删除"}
+
+    def create_partner(
+        self, context: RequestContext, partner_type: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         self._validate_partner_type(partner_type)
         name = self._required_text(payload, "name")
         contact = self._text(payload, "contact")
@@ -125,7 +170,7 @@ class InventoryQueryServiceMixin:
         FROM products p
         LEFT JOIN stock_movements m
             ON m.product_id = p.id AND m.tenant_id = p.tenant_id
-        WHERE p.tenant_id = ?
+        WHERE p.tenant_id = ? AND p.is_deleted = 0
         GROUP BY p.id
         ORDER BY on_hand ASC, p.id DESC
         """
@@ -136,24 +181,30 @@ class InventoryQueryServiceMixin:
         for row in rows:
             item = dict(row)
             item["in_alert"] = float(item["on_hand"]) <= float(item["safety_stock"])
-            item["inventory_value"] = round(float(item["on_hand"]) * float(item["purchase_price"]), 2)
+            item["inventory_value"] = round(
+                float(item["on_hand"]) * float(item["purchase_price"]), 2
+            )
             result.append(item)
         return result
 
-    def _summary_counts(self, connection: sqlite3.Connection, tenant_id: int) -> sqlite3.Row:
+    def _summary_counts(
+        self, connection: sqlite3.Connection, tenant_id: int
+    ) -> sqlite3.Row:
         return connection.execute(
             """
             SELECT
-                (SELECT COUNT(*) FROM products WHERE tenant_id = ?) AS product_count,
-                (SELECT COUNT(*) FROM partners WHERE tenant_id = ? AND partner_type = 'supplier') AS supplier_count,
-                (SELECT COUNT(*) FROM partners WHERE tenant_id = ? AND partner_type = 'customer') AS customer_count,
-                (SELECT COUNT(*) FROM documents WHERE tenant_id = ? AND doc_type = 'purchase') AS purchase_count,
-                (SELECT COUNT(*) FROM documents WHERE tenant_id = ? AND doc_type = 'sale') AS sale_count
+                (SELECT COUNT(*) FROM products WHERE tenant_id = ? AND is_deleted = 0) AS product_count,
+                (SELECT COUNT(*) FROM partners WHERE tenant_id = ? AND partner_type = 'supplier' AND is_deleted = 0) AS supplier_count,
+                (SELECT COUNT(*) FROM partners WHERE tenant_id = ? AND partner_type = 'customer' AND is_deleted = 0) AS customer_count,
+                (SELECT COUNT(*) FROM documents WHERE tenant_id = ? AND doc_type = 'purchase' AND status = 'active') AS purchase_count,
+                (SELECT COUNT(*) FROM documents WHERE tenant_id = ? AND doc_type = 'sale' AND status = 'active') AS sale_count
             """,
             (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id),
         ).fetchone()
 
-    def _summary_stock_rows(self, connection: sqlite3.Connection, tenant_id: int) -> list[sqlite3.Row]:
+    def _summary_stock_rows(
+        self, connection: sqlite3.Connection, tenant_id: int
+    ) -> list[sqlite3.Row]:
         return connection.execute(
             """
             SELECT
@@ -166,20 +217,23 @@ class InventoryQueryServiceMixin:
             FROM products p
             LEFT JOIN stock_movements m
                 ON m.product_id = p.id AND m.tenant_id = p.tenant_id
-            WHERE p.tenant_id = ?
+            WHERE p.tenant_id = ? AND p.is_deleted = 0
             GROUP BY p.id
             ORDER BY on_hand ASC, p.id DESC
             """,
             (tenant_id,),
         ).fetchall()
 
-    def _recent_documents(self, connection: sqlite3.Connection, tenant_id: int) -> list[sqlite3.Row]:
+    def _recent_documents(
+        self, connection: sqlite3.Connection, tenant_id: int
+    ) -> list[sqlite3.Row]:
         return connection.execute(
             """
             SELECT
                 d.doc_no,
                 d.doc_type,
                 d.total_amount,
+                d.status,
                 d.created_at,
                 COALESCE(p.name, '库存调整') AS partner_name
             FROM documents d
@@ -191,7 +245,9 @@ class InventoryQueryServiceMixin:
             (tenant_id,),
         ).fetchall()
 
-    def _summary_alerts(self, stock_rows: list[sqlite3.Row]) -> tuple[float, list[dict[str, Any]]]:
+    def _summary_alerts(
+        self, stock_rows: list[sqlite3.Row]
+    ) -> tuple[float, list[dict[str, Any]]]:
         stock_value = 0.0
         alert_items: list[dict[str, Any]] = []
         for row in stock_rows:

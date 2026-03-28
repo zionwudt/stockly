@@ -1,5 +1,6 @@
 import { getState, loadDocuments } from '../store.js';
-import { formatCurrency, formatDateTime, typeTag, typeLabel, escapeHtml } from '../utils.js';
+import { api } from '../api.js';
+import { formatCurrency, formatDateTime, typeTag, typeLabel, escapeHtml, toast } from '../utils.js';
 
 let docFilter = 'all';
 
@@ -46,9 +47,12 @@ function renderDocList(container, docs) {
   }
 
   el.innerHTML = filtered.map(d => `
-    <div class="list-item">
+    <div class="list-item ${d.status === 'void' ? 'voided' : ''}">
       <div class="list-item-main">
-        <div class="list-item-title">${typeTag(d.doc_type)} ${escapeHtml(d.doc_no)}</div>
+        <div class="list-item-title">
+          ${typeTag(d.doc_type)} ${escapeHtml(d.doc_no)}
+          ${d.status === 'void' ? '<span class="badge-void">已作废</span>' : ''}
+        </div>
         <div class="list-item-desc">
           ${escapeHtml(d.partner_name || '')}
           · ${d.item_count || 0} 项
@@ -58,6 +62,7 @@ function renderDocList(container, docs) {
       </div>
       <div class="list-item-right">
         <span class="font-num">${formatCurrency(d.total_amount)}</span>
+        ${d.status === 'active' ? `<button class="btn-void" data-id="${d.id}" title="作废">作废</button>` : ''}
       </div>
     </div>
   `).join('');
@@ -79,6 +84,21 @@ function bindEvents(container) {
       window.__app.navigate('/' + type);
     });
   }
+
+  container.querySelector('#doc-list').addEventListener('click', async (e) => {
+    const voidBtn = e.target.closest('.btn-void');
+    if (!voidBtn) return;
+
+    const docId = voidBtn.dataset.id;
+    if (!confirm('确定要作废此单据吗？作废后将冲销库存。')) return;
+
+    try {
+      await api.voidDocument(docId);
+      await window.__app.refreshData('单据已作废');
+    } catch (err) {
+      toast(err.message || '作废单据失败', 'error');
+    }
+  });
 }
 
 export function unmount() {}

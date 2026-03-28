@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from ..db import get_connection
 from .models import RequestContext, ValidationError
 
 
+def _db_now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 class DocumentServiceMixin:
-    def list_movements(self, context: RequestContext, limit: int = 30) -> list[dict[str, Any]]:
+    def list_movements(
+        self, context: RequestContext, limit: int = 30
+    ) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 200))
         query = """
         SELECT
@@ -54,6 +61,7 @@ class DocumentServiceMixin:
             d.doc_type,
             d.note,
             d.total_amount,
+            d.status,
             d.created_at,
             COALESCE(p.name, '库存调整') AS partner_name,
             COUNT(i.id) AS item_count
@@ -72,7 +80,9 @@ class DocumentServiceMixin:
             rows = connection.execute(query, tuple(parameters)).fetchall()
         return [dict(row) for row in rows]
 
-    def create_purchase(self, context: RequestContext, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_purchase(
+        self, context: RequestContext, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         return self._create_trade_document(
             context,
             payload,
@@ -82,7 +92,9 @@ class DocumentServiceMixin:
             success_message="采购入库已登记",
         )
 
-    def create_sale(self, context: RequestContext, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_sale(
+        self, context: RequestContext, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         return self._create_trade_document(
             context,
             payload,
@@ -92,7 +104,9 @@ class DocumentServiceMixin:
             success_message="销售出库已登记",
         )
 
-    def create_adjustment(self, context: RequestContext, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_adjustment(
+        self, context: RequestContext, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         product_id = int(payload.get("product_id") or 0)
         quantity_delta = self._number(payload, "quantity_delta")
         reason = self._required_text(payload, "reason")
@@ -105,7 +119,9 @@ class DocumentServiceMixin:
 
         with get_connection(self.db_path) as connection:
             self._product_exists(connection, context.tenant_id, product_id)
-            current_stock = self._stock_by_product(connection, context.tenant_id).get(product_id, 0.0)
+            current_stock = self._stock_by_product(connection, context.tenant_id).get(
+                product_id, 0.0
+            )
             if current_stock + quantity_delta < 0:
                 raise ValidationError(f"调整后库存不能为负数，当前库存 {current_stock}")
 
@@ -142,6 +158,60 @@ class DocumentServiceMixin:
 
         return {"message": f"库存调整已登记，单号 {doc_no}", "doc_no": doc_no}
 
+    def void_document(
+        self, context: RequestContext, document_id: int, reason: str | None = None
+    ) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            doc_row = connection.execute(
+                "SELECT id, doc_type, status FROM documents WHERE id = ? AND tenant_id = ?",
+                (document_id, context.tenant_id),
+            ).fetchone()
+
+            if doc_row is None:
+                raise ValidationError("单据不存在。")
+            if doc_row["status"] == "void":
+                raise ValidationError("该单据已作废，请勿重复操作。")
+
+            self._void_stock_movements(connection, context.tenant_id, document_id)
+
+            void_reason = reason or "作废"
+            connection.execute(
+                "UPDATE documents SET status = 'void', voided_at = ?, void_reason = ? WHERE id = ?",
+                (_db_now(), void_reason, document_id),
+            )
+            connection.commit()
+
+        return {"message": "单据已作废"}
+
+    def _void_stock_movements(
+        self,
+        connection: sqlite3.Connection,
+        tenant_id: int,
+        document_id: int,
+    ) -> None:
+        movements = connection.execute(
+            "SELECT product_id, movement_type, quantity_delta, unit_price, note FROM stock_movements WHERE document_id = ? AND tenant_id = ?",
+            (document_id, tenant_id),
+        ).fetchall()
+
+        for m in movements:
+            reverse_type = m["movement_type"] + "_void"
+            connection.execute(
+                """
+                INSERT INTO stock_movements (tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    m["product_id"],
+                    document_id,
+                    reverse_type,
+                    -m["quantity_delta"],
+                    m["unit_price"],
+                    f"作废冲销: {m['note']}" if m["note"] else "作废冲销",
+                ),
+            )
+
     def _create_trade_document(
         self,
         context: RequestContext,
@@ -156,11 +226,15 @@ class DocumentServiceMixin:
         items = self._normalize_items(payload)
 
         with get_connection(self.db_path) as connection:
-            partner_id = self._partner_id(connection, context.tenant_id, payload, partner_type)
+            partner_id = self._partner_id(
+                connection, context.tenant_id, payload, partner_type
+            )
             if movement_sign < 0:
                 self._ensure_sale_stock(connection, context.tenant_id, items)
 
-            total_amount = round(sum(item["quantity"] * item["unit_price"] for item in items), 2)
+            total_amount = round(
+                sum(item["quantity"] * item["unit_price"] for item in items), 2
+            )
             doc_no = self._generate_doc_no(connection, context.tenant_id, doc_type)
             document_id = self._insert_document(
                 connection,
@@ -195,7 +269,9 @@ class DocumentServiceMixin:
             self._product_exists(connection, tenant_id, item["product_id"])
             available = current_stock.get(item["product_id"], 0.0)
             if available < item["quantity"]:
-                raise ValidationError(f"商品库存不足，product_id={item['product_id']} 当前仅剩 {available}")
+                raise ValidationError(
+                    f"商品库存不足，product_id={item['product_id']} 当前仅剩 {available}"
+                )
             current_stock[item["product_id"]] = round(available - item["quantity"], 2)
 
     def _insert_document(
@@ -282,5 +358,13 @@ class DocumentServiceMixin:
             INSERT INTO stock_movements (tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note),
+            (
+                tenant_id,
+                product_id,
+                document_id,
+                movement_type,
+                quantity_delta,
+                unit_price,
+                note,
+            ),
         )

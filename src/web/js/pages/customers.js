@@ -60,6 +60,7 @@ function renderList(container, customers) {
         </div>
         ${c.note ? `<div class="list-item-note">${escapeHtml(c.note)}</div>` : ''}
       </div>
+      <button class="btn-delete" data-id="${c.id}" title="删除">✕</button>
     </div>
   `).join('');
 }
@@ -76,6 +77,21 @@ function bindEvents(container) {
       await window.__app.refreshData('客户已创建');
     } catch (err) {
       toast(err.message || '新增客户失败', 'error');
+    }
+  });
+
+  container.querySelector('#customer-list').addEventListener('click', async (e) => {
+    const deleteBtn = e.target.closest('.btn-delete');
+    if (!deleteBtn) return;
+
+    const customerId = deleteBtn.dataset.id;
+    if (!confirm('确定要删除此客户吗？')) return;
+
+    try {
+      await api.deleteCustomer(customerId);
+      await window.__app.refreshData('客户已删除');
+    } catch (err) {
+      toast(err.message || '删除客户失败', 'error');
     }
   });
 }

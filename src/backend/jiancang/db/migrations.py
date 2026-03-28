@@ -28,6 +28,7 @@ def init_db(db_path: Path) -> None:
             connection.execute(statement)
         _migrate_legacy_schema(connection)
         _migrate_identity_schema(connection)
+        _migrate_soft_delete(connection)
         for statement in INDEX_STATEMENTS:
             connection.execute(statement)
         _seed_default_identity(connection)
@@ -40,22 +41,51 @@ def _migrate_legacy_schema(connection: sqlite3.Connection) -> None:
             _ensure_column(connection, table, "tenant_id", "INTEGER NOT NULL DEFAULT 1")
 
     for table in TENANTED_TABLES:
-        if _table_exists(connection, table) and _column_exists(connection, table, "tenant_id"):
-            connection.execute(f"UPDATE {table} SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0")
+        if _table_exists(connection, table) and _column_exists(
+            connection, table, "tenant_id"
+        ):
+            connection.execute(
+                f"UPDATE {table} SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0"
+            )
 
 
 def _migrate_identity_schema(connection: sqlite3.Connection) -> None:
     if _table_exists(connection, "tenants"):
         _ensure_column(connection, "tenants", "owner_user_id", "INTEGER")
 
-    if _table_exists(connection, "users") and _column_exists(connection, "users", "tenant_id"):
+    if _table_exists(connection, "users") and _column_exists(
+        connection, "users", "tenant_id"
+    ):
         _migrate_users_to_global_accounts(connection)
 
     if _table_exists(connection, "users"):
         _ensure_column(connection, "users", "last_tenant_id", "INTEGER")
 
-    if not _table_exists(connection, "sessions") or not _column_exists(connection, "sessions", "tenant_id"):
+    if not _table_exists(connection, "sessions") or not _column_exists(
+        connection, "sessions", "tenant_id"
+    ):
         _rebuild_sessions_table(connection)
+
+
+def _migrate_soft_delete(connection: sqlite3.Connection) -> None:
+    if _table_exists(connection, "products"):
+        _ensure_column(
+            connection, "products", "is_deleted", "INTEGER NOT NULL DEFAULT 0"
+        )
+        _ensure_column(connection, "products", "deleted_at", "TEXT")
+
+    if _table_exists(connection, "partners"):
+        _ensure_column(
+            connection, "partners", "is_deleted", "INTEGER NOT NULL DEFAULT 0"
+        )
+        _ensure_column(connection, "partners", "deleted_at", "TEXT")
+
+    if _table_exists(connection, "documents"):
+        _ensure_column(
+            connection, "documents", "status", "TEXT NOT NULL DEFAULT 'active'"
+        )
+        _ensure_column(connection, "documents", "voided_at", "TEXT")
+        _ensure_column(connection, "documents", "void_reason", "TEXT")
 
 
 def _migrate_users_to_global_accounts(connection: sqlite3.Connection) -> None:
@@ -87,7 +117,9 @@ def _migrate_users_to_global_accounts(connection: sqlite3.Connection) -> None:
 
     seen_usernames: set[str] = set()
     for row in legacy_rows:
-        username = _dedupe_username(seen_usernames, str(row["username"]), str(row["tenant_slug"]))
+        username = _dedupe_username(
+            seen_usernames, str(row["username"]), str(row["tenant_slug"])
+        )
         seen_usernames.add(username)
         connection.execute(
             """
@@ -149,7 +181,9 @@ def _seed_default_identity(connection: sqlite3.Connection) -> None:
     tenant_id = _get_default_tenant_id(connection)
 
     for table in TENANTED_TABLES:
-        if _table_exists(connection, table) and _column_exists(connection, table, "tenant_id"):
+        if _table_exists(connection, table) and _column_exists(
+            connection, table, "tenant_id"
+        ):
             connection.execute(
                 f"UPDATE {table} SET tenant_id = ? WHERE tenant_id IS NULL OR tenant_id = 0",
                 (tenant_id,),
@@ -246,12 +280,18 @@ def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
-def _column_exists(connection: sqlite3.Connection, table_name: str, column_name: str) -> bool:
+def _column_exists(
+    connection: sqlite3.Connection, table_name: str, column_name: str
+) -> bool:
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return any(row["name"] == column_name for row in rows)
 
 
-def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+def _ensure_column(
+    connection: sqlite3.Connection, table_name: str, column_name: str, definition: str
+) -> None:
     if _column_exists(connection, table_name, column_name):
         return
-    connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    connection.execute(
+        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"
+    )
