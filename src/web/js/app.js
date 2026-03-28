@@ -22,18 +22,18 @@ const AUTH_PATH = '/';
 
 // Route definitions
 const ROUTES = {
-  '/':           { module: home,       title: '简仓',     tab: true },
-  '/inventory':  { module: inventory,  title: '库存',     tab: true },
-  '/documents':  { module: documents,  title: '单据',     tab: true },
-  '/more':       { module: more,       title: '更多',     tab: true },
-  '/products':   { module: products,   title: '商品管理', parent: '/more' },
-  '/suppliers':  { module: suppliers,  title: '供应商',   parent: '/more' },
-  '/customers':  { module: customers,  title: '客户',     parent: '/more' },
-  '/tenants':    { module: tenants,    title: '团队管理', parent: '/more' },
-  '/stats':      { module: stats,      title: '统计分析', parent: '/more' },
-  '/purchase':   { module: purchase,   title: '采购入库', parent: '/' },
-  '/sale':       { module: sale,       title: '销售出库', parent: '/' },
-  '/adjustment': { module: adjustment, title: '库存调整', parent: '/' },
+  '/':           { module: home,       title: '简仓' },
+  '/inventory':  { module: inventory,  title: '库存查询' },
+  '/documents':  { module: documents,  title: '单据列表' },
+  '/more':       { module: more,       title: '更多' },
+  '/products':   { module: products,   title: '商品管理' },
+  '/suppliers':  { module: suppliers,  title: '供应商' },
+  '/customers':  { module: customers,  title: '客户' },
+  '/tenants':    { module: tenants,    title: '团队管理' },
+  '/stats':      { module: stats,      title: '统计分析' },
+  '/purchase':   { module: purchase,   title: '采购入库' },
+  '/sale':       { module: sale,       title: '销售出库' },
+  '/adjustment': { module: adjustment, title: '库存调整' },
 };
 
 async function boot() {
@@ -62,14 +62,18 @@ async function boot() {
   const container = document.getElementById('page');
   const title = document.getElementById('header-title');
   const backBtn = document.getElementById('header-back');
-  const tabBar = document.getElementById('tab-bar');
 
   backBtn.addEventListener('click', () => router.back());
 
-  router.start(container, title, backBtn, tabBar);
+  router.start(container, title, backBtn);
+
+  // Update drawer user info
+  const { auth, tenantHub } = getState();
+  const displayName = auth?.display_name || auth?.username || '';
+  const tenantName = tenantHub?.tenants?.find(t => t.id === auth?.current_tenant)?.name || '';
+  router.updateDrawerUser(displayName, tenantName);
 
   // If no tenant, force to tenant management
-  const { auth } = getState();
   if (!auth?.current_tenant) {
     router.navigate('/tenants');
   }
