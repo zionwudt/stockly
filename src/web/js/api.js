@@ -6,7 +6,10 @@ async function request(method, path, body) {
   }
   const res = await fetch(path, opts);
   if (res.status === 401) {
-    window.location.href = '/auth';
+    const isAuthPage = window.location.pathname === '/auth' || window.location.pathname === '/';
+    if (!isAuthPage) {
+      window.location.href = '/auth';
+    }
     throw new Error('Unauthorized');
   }
   const contentType = res.headers.get('content-type') || '';
