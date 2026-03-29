@@ -46,6 +46,50 @@ class InventoryQueryServiceMixin:
             connection.commit()
         return {"message": "商品已删除"}
 
+    def update_product(
+        self, context: RequestContext, product_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        sku = self._required_text(payload, "sku")
+        name = self._required_text(payload, "name")
+        category = self._text(payload, "category")
+        unit = self._text(payload, "unit") or "件"
+        purchase_price = self._non_negative_number(payload, "purchase_price")
+        sale_price = self._non_negative_number(payload, "sale_price")
+        safety_stock = self._non_negative_number(payload, "safety_stock")
+
+        with get_connection(self.db_path) as connection:
+            cursor = connection.execute(
+                "SELECT id FROM products WHERE id = ? AND tenant_id = ? AND is_deleted = 0",
+                (product_id, context.tenant_id),
+            )
+            if cursor.fetchone() is None:
+                raise ValidationError("商品不存在或已删除。")
+
+            try:
+                connection.execute(
+                    """
+                    UPDATE products
+                    SET sku = ?, name = ?, category = ?, unit = ?, purchase_price = ?, sale_price = ?, safety_stock = ?
+                    WHERE id = ? AND tenant_id = ?
+                    """,
+                    (
+                        sku,
+                        name,
+                        category,
+                        unit,
+                        purchase_price,
+                        sale_price,
+                        safety_stock,
+                        product_id,
+                        context.tenant_id,
+                    ),
+                )
+                connection.commit()
+            except sqlite3.IntegrityError as exc:
+                raise ValidationError("商品编码已存在，请使用新的 SKU。") from exc
+
+        return {"message": "商品已更新"}
+
     def create_product(
         self, context: RequestContext, payload: dict[str, Any]
     ) -> dict[str, Any]:

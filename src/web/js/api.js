@@ -20,6 +20,7 @@ async function request(method, path, body) {
 
 function get(path) { return request('GET', path); }
 function post(path, body) { return request('POST', path, body); }
+function put(path, body) { return request('PUT', path, body); }
 function del(path, body) { return request('DELETE', path, body); }
 
 export const api = {
@@ -28,6 +29,7 @@ export const api = {
   register: (d) => post('/api/auth/register', d),
   logout: () => post('/api/auth/logout', {}),
   me: () => get('/api/auth/me'),
+  updateProfile: (d) => put('/api/auth/profile', d),
   switchTenant: (d) => post('/api/auth/switch-tenant', d),
 
   // Tenant hub
@@ -36,6 +38,12 @@ export const api = {
   joinRequest: (d) => post('/api/tenant-join-requests', d),
   approveJoin: (id) => post(`/api/tenant-join-requests/${id}/approve`, {}),
   rejectJoin: (id) => post(`/api/tenant-join-requests/${id}/reject`, {}),
+  
+  // Tenant detail
+  getTenantDetail: (id) => get(`/api/tenants/${id}`),
+  updateTenantName: (id, d) => put(`/api/tenants/${id}/name`, d),
+  updateMemberRole: (tenantId, userId, d) => put(`/api/tenants/${tenantId}/members/${userId}/role`, d),
+  removeMember: (tenantId, userId) => del(`/api/tenants/${tenantId}/members/${userId}`, {}),
 
   // Workspace data
   summary: () => get('/api/summary'),
@@ -56,11 +64,20 @@ export const api = {
     if (end) params.push(`end_date=${end}`);
     return get('/api/statistics' + (params.length ? '?' + params.join('&') : ''));
   },
+  getStatistics: (start, end) => {
+    const params = [];
+    if (start) params.push(`start_date=${start}`);
+    if (end) params.push(`end_date=${end}`);
+    return get('/api/statistics' + (params.length ? '?' + params.join('&') : ''));
+  },
 
   // Create operations
   createProduct: (d) => post('/api/products', d),
+  updateProduct: (id, d) => put(`/api/products/${id}`, d),
   createSupplier: (d) => post('/api/suppliers', d),
+  updateSupplier: (id, d) => put(`/api/suppliers/${id}`, d),
   createCustomer: (d) => post('/api/customers', d),
+  updateCustomer: (id, d) => put(`/api/customers/${id}`, d),
   createPurchase: (d) => post('/api/purchases', d),
   createSale: (d) => post('/api/sales', d),
   createAdjustment: (d) => post('/api/adjustments', d),

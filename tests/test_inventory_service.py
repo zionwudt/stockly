@@ -253,6 +253,61 @@ def test_create_sale_updates_stock_and_records_document(
     assert sale_documents[0]["doc_no"] == result["doc_no"]
 
 
+def test_update_product_updates_fields_and_preserves_inventory(
+    service: InventoryService,
+    context,
+) -> None:
+    product = next(item for item in service.list_products(context) if item["sku"] == "JC-COFFEE-001")
+
+    service.update_product(
+        context,
+        product["id"],
+        {
+            "sku": "JC-COFFEE-001A",
+            "name": "美式咖啡豆升级版",
+            "category": "咖啡豆",
+            "unit": "袋",
+            "purchase_price": 42,
+            "sale_price": 68,
+            "safety_stock": 12,
+        },
+    )
+
+    updated = next(item for item in service.list_products(context) if item["id"] == product["id"])
+
+    assert updated["sku"] == "JC-COFFEE-001A"
+    assert updated["name"] == "美式咖啡豆升级版"
+    assert updated["unit"] == "袋"
+    assert updated["purchase_price"] == pytest.approx(42)
+    assert updated["sale_price"] == pytest.approx(68)
+    assert updated["safety_stock"] == pytest.approx(12)
+    assert updated["on_hand"] == pytest.approx(product["on_hand"])
+
+
+def test_update_product_rejects_duplicate_sku(
+    service: InventoryService,
+    context,
+) -> None:
+    products = service.list_products(context)
+    product = products[0]
+    duplicate = products[1]
+
+    with pytest.raises(ValidationError, match="商品编码已存在"):
+        service.update_product(
+            context,
+            product["id"],
+            {
+                "sku": duplicate["sku"],
+                "name": product["name"],
+                "category": product["category"],
+                "unit": product["unit"],
+                "purchase_price": product["purchase_price"],
+                "sale_price": product["sale_price"],
+                "safety_stock": product["safety_stock"],
+            },
+        )
+
+
 def test_create_sale_rejects_when_stock_is_insufficient(
     service: InventoryService,
     context,

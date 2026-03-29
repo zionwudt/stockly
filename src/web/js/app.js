@@ -7,12 +7,12 @@ import { toast } from './utils.js';
 import * as home from './pages/home.js';
 import * as inventory from './pages/inventory.js';
 import * as documents from './pages/documents.js';
-import * as more from './pages/more.js';
+import * as account from './pages/account.js';
 import * as products from './pages/products.js';
 import * as suppliers from './pages/suppliers.js';
 import * as customers from './pages/customers.js';
 import * as tenants from './pages/tenants.js';
-import * as stats from './pages/stats.js';
+import * as tenantDetail from './pages/tenant-detail.js';
 import * as purchase from './pages/purchase.js';
 import * as sale from './pages/sale.js';
 import * as adjustment from './pages/adjustment.js';
@@ -25,12 +25,18 @@ const ROUTES = {
   '/':           { module: home,       title: '简仓' },
   '/inventory':  { module: inventory,  title: '库存查询' },
   '/documents':  { module: documents,  title: '单据列表' },
-  '/more':       { module: more,       title: '更多' },
-  '/products':   { module: products,   title: '商品管理' },
-  '/suppliers':  { module: suppliers,  title: '供应商' },
-  '/customers':  { module: customers,  title: '客户' },
+  '/account':    { module: account,    title: '账号管理' },
+  '/products':   { module: products,   title: '商品列表' },
+  '/products/create': { module: products, title: '新增商品', parent: '/products' },
+  '/products/detail': { module: products, title: '商品详情', parent: '/products' },
+  '/suppliers':  { module: suppliers,  title: '供应商列表' },
+  '/suppliers/create': { module: suppliers, title: '新增供应商' },
+  '/suppliers/detail': { module: suppliers, title: '供应商详情' },
+  '/customers':  { module: customers,  title: '客户列表' },
+  '/customers/create': { module: customers, title: '新增客户', parent: '/customers' },
+  '/customers/detail': { module: customers, title: '客户详情', parent: '/customers' },
   '/tenants':    { module: tenants,    title: '团队管理' },
-  '/stats':      { module: stats,      title: '统计分析' },
+  '/tenants/detail': { module: tenantDetail, title: '团队详情', parent: '/tenants' },
   '/purchase':   { module: purchase,   title: '采购入库' },
   '/sale':       { module: sale,       title: '销售出库' },
   '/adjustment': { module: adjustment, title: '库存调整' },
@@ -61,16 +67,14 @@ async function boot() {
   // Start router
   const container = document.getElementById('page');
   const title = document.getElementById('header-title');
-  const backBtn = document.getElementById('header-back');
 
-  backBtn.addEventListener('click', () => router.back());
-
-  router.start(container, title, backBtn);
+  router.start(container, title);
 
   // Update drawer user info
   const { auth, tenantHub } = getState();
-  const displayName = auth?.display_name || auth?.username || '';
-  const tenantName = tenantHub?.tenants?.find(t => t.id === auth?.current_tenant)?.name || '';
+  const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
+  const displayName = auth?.user?.display_name || auth?.user?.username || '';
+  const tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name || '';
   router.updateDrawerUser(displayName, tenantName);
 
   // If no tenant, force to tenant management
@@ -111,6 +115,9 @@ function redirectToAuth(message = '') {
 
 // Expose globally for page modules
 window.__app = {
+  getState,
+  api,
+  toast,
   refreshData: async function(successMsg) {
     try {
       await loadAuth();
@@ -119,13 +126,19 @@ window.__app = {
       if (auth?.current_tenant) {
         await loadWorkspace();
       }
+      // Update tenant name display
+      const { tenantHub } = getState();
+      const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
+      const displayName = auth?.user?.display_name || auth?.user?.username || '';
+      const tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name || '';
+      router.updateDrawerUser(displayName, tenantName);
       // Re-mount current page
       const hash = router.currentPath();
-      const route = ROUTES[hash];
-      if (route) {
+      const resolved = router.resolveRoute(hash);
+      if (resolved) {
         const container = document.getElementById('page');
         container.innerHTML = '';
-        route.module.mount(container);
+        resolved.config.module.mount(container);
       }
       if (successMsg) toast(successMsg, 'success');
     } catch (err) {

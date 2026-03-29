@@ -231,6 +231,154 @@ class TenantServiceMixin:
                 (request_row["tenant_id"], request_row["user_id"], decided_at),
             )
 
+    def get_tenant_detail(self, principal: SessionPrincipal, tenant_id: int) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            # Check if user has access to this tenant
+            membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, principal.user_id),
+            ).fetchone()
+            if not membership:
+                raise ValidationError("你没有访问该租户的权限。")
+            
+            tenant_detail = self._get_tenant_detail(connection, tenant_id)
+            if not tenant_detail:
+                raise ValidationError("租户不存在。")
+            
+            members = self._list_tenant_members(connection, tenant_id)
+            
+            # Get pending approvals for this tenant (for owner and admins)
+            pending_approvals = []
+            if membership["role"] in ("owner", "admin"):
+                pending_approvals = connection.execute(
+                    """
+                    SELECT
+                        r.id,
+                        r.note,
+                        r.created_at,
+                        u.id AS applicant_id,
+                        u.username,
+                        u.display_name
+                    FROM tenant_join_requests r
+                    JOIN users u ON u.id = r.user_id
+                    WHERE r.tenant_id = ? AND r.status = 'pending'
+                    ORDER BY r.created_at DESC
+                    """,
+                    (tenant_id,),
+                ).fetchall()
+                pending_approvals = [dict(row) for row in pending_approvals]
+            
+            return {
+                "tenant": tenant_detail,
+                "members": members,
+                "pending_approvals": pending_approvals,
+                "user_role": membership["role"],
+            }
+
+    def update_tenant_name(self, principal: SessionPrincipal, tenant_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        name = self._required_text(payload, "name")
+        
+        with get_connection(self.db_path) as connection:
+            # Check if user is owner of this tenant
+            membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, principal.user_id),
+            ).fetchone()
+            if not membership or membership["role"] != "owner":
+                raise ValidationError("只有租户创建者可以修改租户名称。")
+            
+            connection.execute(
+                "UPDATE tenants SET name = ? WHERE id = ?",
+                (name, tenant_id),
+            )
+            connection.commit()
+        
+        return {"message": "租户名称已更新。"}
+
+    def update_member_role(self, principal: SessionPrincipal, tenant_id: int, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        role = self._required_text(payload, "role")
+        if role not in ("member", "admin"):
+            raise ValidationError("角色必须是 member 或 admin。")
+        
+        with get_connection(self.db_path) as connection:
+            # Check if current user is owner of this tenant
+            current_membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, principal.user_id),
+            ).fetchone()
+            if not current_membership or current_membership["role"] != "owner":
+                raise ValidationError("只有租户创建者可以修改成员角色。")
+            
+            # Check if target user is owner (can't change owner's role)
+            target_membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, user_id),
+            ).fetchone()
+            if not target_membership:
+                raise ValidationError("该用户不是此租户的成员。")
+            if target_membership["role"] == "owner":
+                raise ValidationError("不能修改创建者的角色。")
+            
+            connection.execute(
+                "UPDATE tenant_memberships SET role = ? WHERE tenant_id = ? AND user_id = ?",
+                (role, tenant_id, user_id),
+            )
+            connection.commit()
+        
+        return {"message": "成员角色已更新。"}
+
+    def remove_member(self, principal: SessionPrincipal, tenant_id: int, user_id: int) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            # Check if current user is owner of this tenant
+            current_membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, principal.user_id),
+            ).fetchone()
+            if not current_membership or current_membership["role"] != "owner":
+                raise ValidationError("只有租户创建者可以移除成员。")
+            
+            # Check if target user is owner (can't remove owner)
+            target_membership = connection.execute(
+                """
+                SELECT role FROM tenant_memberships
+                WHERE tenant_id = ? AND user_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, user_id),
+            ).fetchone()
+            if not target_membership:
+                raise ValidationError("该用户不是此租户的成员。")
+            if target_membership["role"] == "owner":
+                raise ValidationError("不能移除创建者。")
+            
+            connection.execute(
+                "DELETE FROM tenant_memberships WHERE tenant_id = ? AND user_id = ?",
+                (tenant_id, user_id),
+            )
+            connection.commit()
+        
+        return {"message": "成员已移除。"}
+
     def _next_tenant_slug(self, connection: sqlite3.Connection, name: str) -> str:
         base = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-")
         base = re.sub(r"-{2,}", "-", base)

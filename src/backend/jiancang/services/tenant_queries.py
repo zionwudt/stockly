@@ -213,6 +213,47 @@ class TenantQueryMixin:
             tenant_role=str(tenant_row["tenant_role"]) if tenant_row is not None else None,
         )
 
+    def _list_tenant_members(self, connection: sqlite3.Connection, tenant_id: int) -> list[dict[str, Any]]:
+        rows = connection.execute(
+            """
+            SELECT
+                tm.user_id,
+                tm.role,
+                tm.created_at AS joined_at,
+                u.username,
+                u.display_name
+            FROM tenant_memberships tm
+            JOIN users u ON u.id = tm.user_id
+            WHERE tm.tenant_id = ?
+            ORDER BY CASE WHEN tm.role = 'owner' THEN 0 WHEN tm.role = 'admin' THEN 1 ELSE 2 END, tm.created_at ASC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _get_tenant_detail(self, connection: sqlite3.Connection, tenant_id: int) -> dict[str, Any] | None:
+        row = connection.execute(
+            """
+            SELECT
+                t.id,
+                t.name,
+                t.slug,
+                t.status,
+                t.owner_user_id,
+                t.created_at,
+                u.username AS owner_username,
+                u.display_name AS owner_display_name
+            FROM tenants t
+            JOIN users u ON u.id = t.owner_user_id
+            WHERE t.id = ?
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return dict(row)
+
     @staticmethod
     def _maybe_context_from_principal(principal: SessionPrincipal) -> RequestContext | None:
         if principal.tenant_id is None or principal.tenant_name is None or principal.tenant_slug is None:

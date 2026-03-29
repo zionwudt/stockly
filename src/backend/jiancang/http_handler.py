@@ -45,11 +45,44 @@ class JianCangHandler(BaseHTTPRequestHandler):
                 return
             if self._handle_tenant_post(path, payload):
                 return
+            if self._handle_tenant_delete(path, payload):
+                return
 
             context = self._require_context()
             if context is None:
                 return
             if self._handle_workspace_delete(path, payload, context):
+                return
+
+            self._send_json({"error": "Not Found"}, status=HTTPStatus.NOT_FOUND)
+        except ValidationError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except json.JSONDecodeError:
+            self._send_json(
+                {"error": "请求体不是合法 JSON。"}, status=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as exc:
+            self._send_json(
+                {"error": f"服务器内部错误: {exc}"},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if not path.startswith("/api/"):
+            self._send_json({"error": "Not Found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        try:
+            payload = self._read_json_body()
+            if self._handle_tenant_put(path, payload):
+                return
+            
+            context = self._require_context()
+            if context is None:
+                return
+            if self._handle_workspace_put(path, payload, context):
                 return
 
             self._send_json({"error": "Not Found"}, status=HTTPStatus.NOT_FOUND)
@@ -184,17 +217,55 @@ class JianCangHandler(BaseHTTPRequestHandler):
         decision_match = re.fullmatch(
             r"/api/tenant-join-requests/(\d+)/(approve|reject)", path
         )
-        if decision_match is None:
-            return False
-
-        principal = self._require_principal()
-        if principal is None:
+        if decision_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            request_id = int(decision_match.group(1))
+            approved = decision_match.group(2) == "approve"
+            result = self.service.review_join_request(principal, request_id, approved)
+            self._send_json(result)
             return True
-        request_id = int(decision_match.group(1))
-        approved = decision_match.group(2) == "approve"
-        result = self.service.review_join_request(principal, request_id, approved)
-        self._send_json(result)
-        return True
+        
+        return False
+
+    def _handle_tenant_put(self, path: str, payload: dict) -> bool:
+        update_name_match = re.fullmatch(r"/api/tenants/(\d+)/name", path)
+        if update_name_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            tenant_id = int(update_name_match.group(1))
+            result = self.service.update_tenant_name(principal, tenant_id, payload)
+            self._send_json(result)
+            return True
+        
+        update_role_match = re.fullmatch(r"/api/tenants/(\d+)/members/(\d+)/role", path)
+        if update_role_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            tenant_id = int(update_role_match.group(1))
+            user_id = int(update_role_match.group(2))
+            result = self.service.update_member_role(principal, tenant_id, user_id, payload)
+            self._send_json(result)
+            return True
+        
+        return False
+
+    def _handle_tenant_delete(self, path: str, payload: dict) -> bool:
+        remove_member_match = re.fullmatch(r"/api/tenants/(\d+)/members/(\d+)", path)
+        if remove_member_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            tenant_id = int(remove_member_match.group(1))
+            user_id = int(remove_member_match.group(2))
+            result = self.service.remove_member(principal, tenant_id, user_id)
+            self._send_json(result)
+            return True
+        
+        return False
 
     def _handle_workspace_post(
         self, path: str, payload: dict, context: RequestContext
@@ -250,6 +321,18 @@ class JianCangHandler(BaseHTTPRequestHandler):
 
         return False
 
+    def _handle_workspace_put(
+        self, path: str, payload: dict, context: RequestContext
+    ) -> bool:
+        product_match = re.fullmatch(r"/api/products/(\d+)", path)
+        if product_match:
+            product_id = int(product_match.group(1))
+            result = self.service.update_product(context, product_id, payload)
+            self._send_json(result)
+            return True
+
+        return False
+
     def _handle_identity_get(self, path: str) -> bool:
         if path == "/api/auth/me":
             principal = self._require_principal()
@@ -258,14 +341,23 @@ class JianCangHandler(BaseHTTPRequestHandler):
             self._send_json(self.service.get_auth_profile(principal))
             return True
 
-        if path != "/api/tenant-hub":
-            return False
-
-        principal = self._require_principal()
-        if principal is None:
+        if path == "/api/tenant-hub":
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            self._send_json(self.service.get_tenant_hub(principal))
             return True
-        self._send_json(self.service.get_tenant_hub(principal))
-        return True
+        
+        tenant_detail_match = re.fullmatch(r"/api/tenants/(\d+)", path)
+        if tenant_detail_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            tenant_id = int(tenant_detail_match.group(1))
+            self._send_json(self.service.get_tenant_detail(principal, tenant_id))
+            return True
+
+        return False
 
     def _handle_workspace_get(
         self,

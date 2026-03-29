@@ -1,8 +1,8 @@
 import { getState, loadTenantHub } from '../store.js';
 import { api } from '../api.js';
 import { escapeHtml, formatDateTime, toast } from '../utils.js';
-
-let actionTab = 'create';
+import { openModal, closeModal } from '../router.js';
+import { navigate } from '../router.js';
 
 export function mount(container) {
   render(container);
@@ -20,7 +20,7 @@ function render(container) {
       <div class="section-header"><h3>我的团队</h3><span class="section-hint">${tenants.length} 个</span></div>
       <div class="card-list" id="tenant-list">
         ${tenants.length ? tenants.map(t => `
-          <div class="list-item ${t.is_current ? 'list-item-active' : ''}" data-enter-tenant="${t.id}">
+          <div class="list-item ${t.is_current ? 'list-item-active' : ''}" ${t.is_owner ? `data-view-detail="${t.id}"` : ''}>
             <div class="list-item-main">
               <div class="list-item-title">
                 ${escapeHtml(t.name)}
@@ -32,7 +32,7 @@ function render(container) {
                 ${t.pending_request_count ? ' · <span class="text-warning">' + t.pending_request_count + ' 待审批</span>' : ''}
               </div>
             </div>
-            ${!t.is_current ? '<div class="list-item-right"><span class="text-primary">切换</span></div>' : ''}
+            ${t.is_owner ? '<div class="list-item-right"><span class="text-primary">详情</span></div>' : ''}
           </div>
         `).join('') : '<div class="empty-hint">暂无团队</div>'}
       </div>
@@ -41,29 +41,9 @@ function render(container) {
     <div class="page-section">
       <div class="section-header"><h3>创建或加入</h3></div>
       <div class="filter-row">
-        <button class="filter-btn ${actionTab === 'create' ? 'active' : ''}" data-action-tab="create">新建团队</button>
-        <button class="filter-btn ${actionTab === 'join' ? 'active' : ''}" data-action-tab="join">申请加入</button>
+        <button class="btn btn-primary" data-action="create">新建团队</button>
+        <button class="btn btn-secondary" data-action="join">申请加入</button>
       </div>
-
-      <form id="tenant-create-form" class="form-card" ${actionTab !== 'create' ? 'hidden' : ''}>
-        <div class="form-field">
-          <label>团队名称</label>
-          <input name="name" type="text" placeholder="例如 华东仓" required>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">创建并切换</button>
-      </form>
-
-      <form id="tenant-join-form" class="form-card" ${actionTab !== 'join' ? 'hidden' : ''}>
-        <div class="form-field">
-          <label>团队标识</label>
-          <input name="tenant_slug" type="text" placeholder="请输入团队标识" required>
-        </div>
-        <div class="form-field">
-          <label>申请说明</label>
-          <textarea name="note" rows="3" placeholder="团队身份、用途或补充说明"></textarea>
-        </div>
-        <button type="submit" class="btn btn-secondary btn-block">提交申请</button>
-      </form>
     </div>
 
     ${myRequests.length ? `
@@ -109,35 +89,25 @@ function render(container) {
 }
 
 function bindEvents(container) {
-  // Action tab switching
+  // Action buttons
   container.addEventListener('click', async (e) => {
-    const tabBtn = e.target.closest('[data-action-tab]');
-    if (tabBtn) {
-      actionTab = tabBtn.dataset.actionTab;
-      container.querySelectorAll('[data-action-tab]').forEach(b => b.classList.toggle('active', b.dataset.actionTab === actionTab));
-      container.querySelector('#tenant-create-form').hidden = actionTab !== 'create';
-      container.querySelector('#tenant-join-form').hidden = actionTab !== 'join';
+    const createBtn = e.target.closest('[data-action="create"]');
+    if (createBtn) {
+      openCreateTenantModal();
       return;
     }
 
-    // Enter/switch tenant
-    const enterBtn = e.target.closest('[data-enter-tenant]');
-    if (enterBtn) {
-      const tenantId = Number(enterBtn.dataset.enterTenant);
-      const { tenantHub, auth } = getState();
-      const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
-      const tenant = tenants.find(t => t.id === tenantId);
-      if (!tenant) return;
-      if (tenant.is_current) {
-        toast(`当前正在使用 ${tenant.name}`, 'info');
-        return;
-      }
-      try {
-        await api.switchTenant({ tenant_id: tenantId });
-        await window.__app.refreshData(`已切换到 ${tenant.name}`);
-      } catch (err) {
-        toast(err.message || '切换团队失败', 'error');
-      }
+    const joinBtn = e.target.closest('[data-action="join"]');
+    if (joinBtn) {
+      openJoinTenantModal();
+      return;
+    }
+
+    // View tenant detail
+    const viewDetailBtn = e.target.closest('[data-view-detail]');
+    if (viewDetailBtn) {
+      const tenantId = Number(viewDetailBtn.dataset.viewDetail);
+      navigate(`/tenants/detail?id=${tenantId}`);
       return;
     }
 
@@ -164,34 +134,94 @@ function bindEvents(container) {
       }
     }
   });
+}
 
-  // Create tenant form
-  container.querySelector('#tenant-create-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.currentTarget;
+function openCreateTenantModal() {
+  const bodyHtml = `
+    <form id="modal-create-form">
+      <div class="form-field">
+        <label>团队名称</label>
+        <input name="name" type="text" placeholder="例如 华东仓" required>
+      </div>
+    </form>
+  `;
+  
+  openModal('新建团队', bodyHtml, null);
+  
+  // 绑定确定按钮点击事件
+  const okBtn = document.getElementById('modal-ok');
+  const originalOnClick = okBtn.onclick;
+  
+  okBtn.onclick = async () => {
+    const form = document.getElementById('modal-create-form');
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
     const data = Object.fromEntries(new FormData(form));
     try {
       const result = await api.createTenant(data);
-      form.reset();
+      closeModal();
       await window.__app.refreshData(result.message || '团队已创建');
     } catch (err) {
       toast(err.message || '创建团队失败', 'error');
     }
-  });
+  };
+  
+  // 恢复原来的点击事件
+  const cancelBtn = document.getElementById('modal-cancel');
+  const originalCancelOnClick = cancelBtn.onclick;
+  cancelBtn.onclick = () => {
+    okBtn.onclick = originalOnClick;
+    cancelBtn.onclick = originalCancelOnClick;
+    closeModal();
+  };
+}
 
-  // Join tenant form
-  container.querySelector('#tenant-join-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.currentTarget;
+function openJoinTenantModal() {
+  const bodyHtml = `
+    <form id="modal-join-form">
+      <div class="form-field">
+        <label>团队标识</label>
+        <input name="tenant_slug" type="text" placeholder="请输入团队标识" required>
+      </div>
+      <div class="form-field">
+        <label>申请说明</label>
+        <textarea name="note" rows="3" placeholder="团队身份、用途或补充说明"></textarea>
+      </div>
+    </form>
+  `;
+  
+  openModal('申请加入团队', bodyHtml, null);
+  
+  // 绑定确定按钮点击事件
+  const okBtn = document.getElementById('modal-ok');
+  const originalOnClick = okBtn.onclick;
+  
+  okBtn.onclick = async () => {
+    const form = document.getElementById('modal-join-form');
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
     const data = Object.fromEntries(new FormData(form));
     try {
       const result = await api.joinRequest(data);
-      form.reset();
+      closeModal();
       await window.__app.refreshData(result.message || '已提交加入申请');
     } catch (err) {
       toast(err.message || '提交申请失败', 'error');
     }
-  });
+  };
+  
+  // 恢复原来的点击事件
+  const cancelBtn = document.getElementById('modal-cancel');
+  const originalCancelOnClick = cancelBtn.onclick;
+  cancelBtn.onclick = () => {
+    okBtn.onclick = originalOnClick;
+    cancelBtn.onclick = originalCancelOnClick;
+    closeModal();
+  };
 }
 
 export function unmount() {}

@@ -43,17 +43,17 @@ export function mount(container) {
       <div class="menu-list">
         <a class="menu-item" href="#/products">
           <span class="menu-icon menu-icon-blue">品</span>
-          <span class="menu-text">商品管理</span>
+          <span class="menu-text">商品列表</span>
           <svg class="menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <a class="menu-item" href="#/suppliers">
           <span class="menu-icon menu-icon-orange">供</span>
-          <span class="menu-text">供应商管理</span>
+          <span class="menu-text">供应商列表</span>
           <svg class="menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <a class="menu-item" href="#/customers">
           <span class="menu-icon menu-icon-green">客</span>
-          <span class="menu-text">客户管理</span>
+          <span class="menu-text">客户列表</span>
           <svg class="menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <a class="menu-item" href="#/stats">
