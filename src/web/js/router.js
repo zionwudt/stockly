@@ -348,17 +348,22 @@ function renderDrawer() {
   });
 }
 
-export function updateDrawerUser(name, tenant) {
+export function updateDrawerUser(name, tenant, avatarData) {
   const nameEl = document.getElementById('drawer-name');
   const tenantEl = document.getElementById('drawer-tenant');
   const avatarEl = document.getElementById('drawer-avatar');
-  
+
   if (nameEl) nameEl.textContent = '简仓';
   if (tenantEl) tenantEl.textContent = '进销存管理系统';
-  if (avatarEl) avatarEl.textContent = '简';
+  if (avatarEl) {
+    if (avatarData) {
+      avatarEl.innerHTML = `<img src="${avatarData}" alt="头像" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    } else {
+      avatarEl.textContent = name ? name[0] : '简';
+    }
+  }
   if (headerTenant) {
     headerTenant.textContent = tenant || '';
-    // 添加可点击样式
     if (tenant) {
       headerTenant.style.cursor = 'pointer';
     }

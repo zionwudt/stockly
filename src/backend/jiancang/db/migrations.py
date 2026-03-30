@@ -29,6 +29,7 @@ def init_db(db_path: Path) -> None:
         _migrate_legacy_schema(connection)
         _migrate_identity_schema(connection)
         _migrate_soft_delete(connection)
+        _migrate_avatar(connection)
         for statement in INDEX_STATEMENTS:
             connection.execute(statement)
         _seed_default_identity(connection)
@@ -86,6 +87,11 @@ def _migrate_soft_delete(connection: sqlite3.Connection) -> None:
         )
         _ensure_column(connection, "documents", "voided_at", "TEXT")
         _ensure_column(connection, "documents", "void_reason", "TEXT")
+
+
+def _migrate_avatar(connection: sqlite3.Connection) -> None:
+    if _table_exists(connection, "users"):
+        _ensure_column(connection, "users", "avatar_data", "TEXT")
 
 
 def _migrate_users_to_global_accounts(connection: sqlite3.Connection) -> None:

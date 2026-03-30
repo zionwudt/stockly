@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     last_tenant_id INTEGER,
     is_active INTEGER NOT NULL DEFAULT 1,
+    avatar_data TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(last_tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
 )

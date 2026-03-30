@@ -75,9 +75,7 @@ async function boot() {
   const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
   const displayName = auth?.user?.display_name || auth?.user?.username || '';
   const tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name || '';
-  router.updateDrawerUser(displayName, tenantName);
-
-  // If no tenant, force to tenant management
+  router.updateDrawerUser(displayName, tenantName, auth?.user?.avatar_data);
   if (!auth?.current_tenant) {
     router.navigate('/tenants');
   }
@@ -131,8 +129,7 @@ window.__app = {
       const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
       const displayName = auth?.user?.display_name || auth?.user?.username || '';
       const tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name || '';
-      router.updateDrawerUser(displayName, tenantName);
-      // Re-mount current page
+      router.updateDrawerUser(displayName, tenantName, auth?.user?.avatar_data);
       const hash = router.currentPath();
       const resolved = router.resolveRoute(hash);
       if (resolved) {

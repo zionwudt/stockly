@@ -76,6 +76,8 @@ class JianCangHandler(BaseHTTPRequestHandler):
 
         try:
             payload = self._read_json_body()
+            if self._handle_auth_put(path, payload):
+                return
             if self._handle_tenant_put(path, payload):
                 return
             
@@ -228,6 +230,16 @@ class JianCangHandler(BaseHTTPRequestHandler):
             return True
         
         return False
+
+    def _handle_auth_put(self, path: str, payload: dict) -> bool:
+        if path != "/api/auth/profile":
+            return False
+        principal = self._require_principal()
+        if principal is None:
+            return True
+        updated_principal = self.service.update_profile(principal, payload)
+        self._send_json(self.service.get_auth_profile(updated_principal))
+        return True
 
     def _handle_tenant_put(self, path: str, payload: dict) -> bool:
         update_name_match = re.fullmatch(r"/api/tenants/(\d+)/name", path)
