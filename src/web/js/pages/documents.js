@@ -1,12 +1,13 @@
-import { getState, loadDocuments } from '../store.js';
+import { getState } from '../store.js';
 import { api } from '../api.js';
-import { formatCurrency, formatDateTime, typeTag, typeLabel, escapeHtml, toast } from '../utils.js';
+import { formatCurrency, formatDateTime, formatQuantity, typeTag, escapeHtml, toast, bindSwipeActions } from '../utils.js';
 import { openConfirm, openModal, closeModal } from '../router.js';
 import { openPurchaseModal } from './purchase.js';
 import { openSaleModal } from './sale.js';
-import { openAdjustmentModal } from './adjustment.js';
+import { openDocumentDetailModal } from './document-detail.js';
 
 let docFilter = 'all';
+let docItemKeyword = '';
 
 export function mount(container) {
   render(container);
@@ -23,6 +24,13 @@ function render(container) {
         <button class="filter-btn ${docFilter === 'purchase' ? 'active' : ''}" data-filter="purchase">采购</button>
         <button class="filter-btn ${docFilter === 'sale' ? 'active' : ''}" data-filter="sale">销售</button>
         <button class="filter-btn ${docFilter === 'adjustment' ? 'active' : ''}" data-filter="adjustment">调整</button>
+      </div>
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="doc-item-search" type="text" placeholder="按商品名搜索单据" value="${escapeHtml(docItemKeyword)}" />
       </div>
     </div>
 
@@ -41,7 +49,13 @@ function render(container) {
 function renderDocList(container, docs) {
   let filtered = docs;
   if (docFilter !== 'all') {
-    filtered = docs.filter(d => d.doc_type === docFilter);
+    filtered = filtered.filter(d => d.doc_type === docFilter);
+  }
+  const keyword = docItemKeyword.trim().toLowerCase();
+  if (keyword) {
+    filtered = filtered.filter(doc => (doc.items || []).some(item =>
+      String(item.product_name || '').toLowerCase().includes(keyword)
+    ));
   }
 
   const el = container.querySelector('#doc-list');
@@ -50,26 +64,56 @@ function renderDocList(container, docs) {
     return;
   }
 
-  el.innerHTML = filtered.map(d => `
-    <div class="list-item ${d.status === 'void' ? 'voided' : ''}">
-      <div class="list-item-main">
-        <div class="list-item-title">
-          ${typeTag(d.doc_type)} ${escapeHtml(d.doc_no)}
-          ${d.status === 'void' ? '<span class="badge-void">已作废</span>' : ''}
+  el.innerHTML = filtered.map(d => {
+    const isVoided = d.status === 'void';
+    const actionLabel = isVoided ? '恢复' : '作废';
+    const actionType = isVoided ? 'restore' : 'void';
+    const actionClass = isVoided ? 'swipe-action-success' : 'swipe-action-warning';
+
+    return `
+    <div class="swipe-wrap">
+      <div class="swipe-content">
+        <div class="list-item ${isVoided ? 'voided' : ''}" data-doc-id="${d.id}">
+          <div class="list-item-main">
+            <div class="list-item-title">
+              ${typeTag(d.doc_type)}
+              <span class="doc-no-text">${escapeHtml(d.doc_no)}</span>
+              ${isVoided ? '<span class="badge-void">已作废</span>' : ''}
+            </div>
+            <div class="list-item-desc">
+              ${escapeHtml(d.partner_name || '')}
+              · ${formatDateTime(d.created_at)}
+            </div>
+            ${renderItemSummary(d.items)}
+            ${d.note ? `<div class="list-item-note">${escapeHtml(d.note)}</div>` : ''}
+          </div>
+          <div class="list-item-right">
+            <span class="font-num">${formatCurrency(d.total_amount)}</span>
+            <div class="list-item-sub">${isVoided ? '已作废' : '正常'}</div>
+          </div>
         </div>
-        <div class="list-item-desc">
-          ${escapeHtml(d.partner_name || '')}
-          · ${d.item_count || 0} 项
-          · ${formatDateTime(d.created_at)}
-        </div>
-        ${d.note ? `<div class="list-item-note">${escapeHtml(d.note)}</div>` : ''}
       </div>
-      <div class="list-item-right">
-        <span class="font-num">${formatCurrency(d.total_amount)}</span>
-        ${d.status === 'active' ? `<button class="btn-void" data-id="${d.id}" title="作废">作废</button>` : ''}
+      <div class="swipe-action ${actionClass}" data-doc-id="${d.id}" data-doc-action="${actionType}">
+        ${actionLabel}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
+}
+
+function renderItemSummary(items) {
+  const safeItems = Array.isArray(items) ? items : [];
+  if (!safeItems.length) return '<div class="list-item-note">暂无明细</div>';
+  return `
+    <div class="doc-items-preview">
+      ${safeItems.map(item => `
+        <div class="doc-item-line">
+          <span class="doc-item-name">${escapeHtml(item.product_name || '未命名商品')}</span>
+          <span class="doc-item-meta">数量 ${formatQuantity(item.quantity || 0)} · 单价 ${formatCurrency(item.unit_price || 0)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function bindEvents(container) {
@@ -80,6 +124,13 @@ function bindEvents(container) {
       renderDocList(container, getState().documents);
     });
   });
+  const searchInput = container.querySelector('#doc-item-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      docItemKeyword = searchInput.value || '';
+      renderDocList(container, getState().documents);
+    });
+  }
 
   const fab = container.querySelector('#new-doc-btn');
   if (fab) {
@@ -101,13 +152,6 @@ function bindEvents(container) {
               <span class="settings-text">销售出库</span>
               <div class="settings-arrow"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
             </button>
-            <button class="settings-item profile-row" data-new-type="adjustment">
-              <div class="menu-icon menu-icon-orange" style="width:32px;height:32px;border-radius:8px">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              </div>
-              <span class="settings-text">库存调整</span>
-              <div class="settings-arrow"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
-            </button>
           </div>
         </div>
       `, () => closeModal());
@@ -115,30 +159,59 @@ function bindEvents(container) {
       requestAnimationFrame(() => {
         const body = document.getElementById('modal-body');
         if (!body) return;
-        const modalMap = { purchase: openPurchaseModal, sale: openSaleModal, adjustment: openAdjustmentModal };
+        const modalMap = { purchase: openPurchaseModal, sale: openSaleModal };
         body.querySelectorAll('[data-new-type]').forEach(btn => {
           btn.addEventListener('click', () => {
             closeModal();
-            setTimeout(() => modalMap[btn.dataset.newType](), 300);
+            const modalFn = modalMap[btn.dataset.newType];
+            if (!modalFn) return;
+            setTimeout(() => modalFn(), 300);
           });
         });
       });
     });
   }
 
-  container.querySelector('#doc-list').addEventListener('click', async (e) => {
-    const voidBtn = e.target.closest('.btn-void');
-    if (!voidBtn) return;
+  const docList = container.querySelector('#doc-list');
+  if (!docList) return;
 
-    const docId = voidBtn.dataset.id;
-    openConfirm('作废单据', '确定要作废此单据吗？作废后将冲销库存。', async () => {
-      try {
-        await api.voidDocument(docId);
-        await window.__app.refreshData('单据已作废');
-      } catch (err) {
-        toast(err.message || '作废单据失败', 'error');
+  docList.addEventListener('click', (e) => {
+    if (e.target.closest('.swipe-action')) return;
+    const item = e.target.closest('.list-item[data-doc-id]');
+    if (!item) return;
+    const doc = getState().documents.find(d => String(d.id) === item.dataset.docId);
+    if (doc) {
+      openDocumentDetailModal(doc, '单据详情');
+    }
+  });
+
+  bindSwipeActions(docList, {
+    onAction: (actionBtn) => {
+      const docId = Number(actionBtn.dataset.docId);
+      const actionType = actionBtn.dataset.docAction;
+      if (!docId || !actionType) return;
+
+      if (actionType === 'void') {
+        openConfirm('作废单据', '确定要作废此单据吗？作废后将冲销库存。', async () => {
+          try {
+            await api.voidDocument(docId);
+            await window.__app.refreshData('单据已作废');
+          } catch (err) {
+            toast(err.message || '作废单据失败', 'error');
+          }
+        });
+        return;
       }
-    });
+
+      openConfirm('恢复单据', '确定要恢复此单据吗？恢复后会重新计入库存。', async () => {
+        try {
+          await api.restoreDocument(docId);
+          await window.__app.refreshData('单据已恢复');
+        } catch (err) {
+          toast(err.message || '恢复单据失败', 'error');
+        }
+      });
+    },
   });
 }
 

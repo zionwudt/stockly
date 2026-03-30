@@ -302,6 +302,12 @@ class JianCangHandler(BaseHTTPRequestHandler):
                 result = self.service.void_document(context, document_id, reason)
                 self._send_json(result)
                 return True
+            restore_match = re.fullmatch(r"/api/documents/(\d+)/restore", path)
+            if restore_match:
+                document_id = int(restore_match.group(1))
+                result = self.service.restore_document(context, document_id)
+                self._send_json(result)
+                return True
             return False
 
         self._send_json(result, status=HTTPStatus.CREATED)

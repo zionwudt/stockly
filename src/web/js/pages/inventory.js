@@ -1,12 +1,13 @@
-import { getState, loadStock, loadMovements } from '../store.js';
-import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeTag, escapeHtml } from '../utils.js';
+import { getState } from '../store.js';
+import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeLabel, escapeHtml, bindSwipeActions } from '../utils.js';
+import { openModal, closeModal } from '../router.js';
 import { openAdjustmentModal } from './adjustment.js';
 
 let searchQuery = '';
 let filter = 'all';
 
 export function mount(container) {
-  const { stock, movements } = getState();
+  const { stock } = getState();
 
   container.innerHTML = `
     <div class="page-section">
@@ -28,18 +29,9 @@ export function mount(container) {
       </div>
       <div class="card-list" id="stock-list"></div>
     </div>
-
-    <div class="page-section">
-      <div class="section-header">
-        <h3>最近流水</h3>
-        <span class="section-hint">最近 30 条</span>
-      </div>
-      <div class="card-list" id="movement-list"></div>
-    </div>
   `;
 
   renderStockList(container, stock);
-  renderMovementList(container, movements);
   bindEvents(container);
 }
 
@@ -66,40 +58,24 @@ function renderStockList(container, stock) {
   }
 
   el.innerHTML = filtered.map(s => `
-    <div class="list-item">
-      <div class="list-item-main">
-        <div class="list-item-title">
-          ${s.in_alert ? '<span class="dot dot-danger"></span>' : ''}
-          ${escapeHtml(s.name)}
+    <div class="swipe-wrap">
+      <div class="swipe-content">
+        <div class="list-item" data-stock-id="${s.id}">
+          <div class="list-item-main">
+            <div class="list-item-title">
+              ${s.in_alert ? '<span class="dot dot-danger"></span>' : ''}
+              ${escapeHtml(s.name)}
+            </div>
+            <div class="list-item-desc">${escapeHtml(s.sku)}${s.category ? ' · ' + escapeHtml(s.category) : ''}</div>
+          </div>
+          <div class="list-item-right">
+            <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
+            <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
+          </div>
         </div>
-        <div class="list-item-desc">${escapeHtml(s.sku)}${s.category ? ' · ' + escapeHtml(s.category) : ''}</div>
       </div>
-      <div class="list-item-right" style="display:flex;align-items:center;gap:10px">
-        <div>
-          <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
-          <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
-        </div>
-        <button class="btn btn-sm btn-outline" data-adjust-id="${s.id}" data-adjust-name="${escapeHtml(s.name)}" style="padding:0 8px;height:28px;font-size:11px">调整</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function renderMovementList(container, movements) {
-  const el = container.querySelector('#movement-list');
-  if (!movements.length) {
-    el.innerHTML = '<div class="empty-hint">暂无流水记录</div>';
-    return;
-  }
-
-  el.innerHTML = movements.map(m => `
-    <div class="list-item">
-      <div class="list-item-main">
-        <div class="list-item-title">${typeTag(m.movement_type)} ${escapeHtml(m.product_name)}</div>
-        <div class="list-item-desc">${escapeHtml(m.doc_no)} · ${formatDateTime(m.created_at)}</div>
-      </div>
-      <div class="list-item-right">
-        <span class="font-num ${m.quantity_delta > 0 ? 'text-success' : 'text-danger'}">${signedQuantity(m.quantity_delta)}</span>
+      <div class="swipe-action swipe-action-primary" data-stock-action="adjust" data-stock-id="${s.id}">
+        调整
       </div>
     </div>
   `).join('');
@@ -122,15 +98,86 @@ function bindEvents(container) {
     });
   });
 
-  // Adjust stock button — delegate on stock-list
-  container.querySelector('#stock-list').addEventListener('click', (e) => {
-    const adjustBtn = e.target.closest('[data-adjust-id]');
-    if (!adjustBtn) return;
-    e.stopPropagation();
-    const productId = Number(adjustBtn.dataset.adjustId);
-    openAdjustmentModal(productId);
+  const stockList = container.querySelector('#stock-list');
+  if (!stockList) return;
+
+  stockList.addEventListener('click', (e) => {
+    if (e.target.closest('.swipe-action')) return;
+    const item = e.target.closest('.list-item[data-stock-id]');
+    if (!item) return;
+    const productId = Number(item.dataset.stockId);
+    const product = getState().stock.find(s => Number(s.id) === productId);
+    if (product) {
+      openStockMovementModal(product);
+    }
+  });
+
+  bindSwipeActions(stockList, {
+    onAction: (actionBtn) => {
+      if (actionBtn.dataset.stockAction !== 'adjust') return;
+      const productId = Number(actionBtn.dataset.stockId);
+      if (!productId) return;
+      openAdjustmentModal(productId);
+    },
   });
 }
 
-export function unmount() {}
+function openStockMovementModal(stockItem) {
+  const movements = (getState().movements || [])
+    .filter(m => Number(m.product_id) === Number(stockItem.id))
+    .slice(0, 20);
 
+  const movementRows = movements.length ? movements.map(m => `
+    <div class="list-item">
+      <div class="list-item-main">
+        <div class="list-item-title">${movementTag(m.movement_type)} ${escapeHtml(m.product_name || stockItem.name)}</div>
+        <div class="list-item-desc">${escapeHtml(m.doc_no || '无单号')} · ${formatDateTime(m.created_at)}</div>
+        ${m.note ? `<div class="list-item-note">${escapeHtml(m.note)}</div>` : ''}
+      </div>
+      <div class="list-item-right">
+        <span class="font-num ${m.quantity_delta > 0 ? 'text-success' : 'text-danger'}">${signedQuantity(m.quantity_delta)}</span>
+      </div>
+    </div>
+  `).join('') : '<div class="empty-hint">暂无该商品流水记录</div>';
+
+  const body = `
+    <div class="detail-sheet">
+      <div class="detail-head">
+        <div class="detail-doc-no">${escapeHtml(stockItem.name)}</div>
+        <span class="detail-status ${stockItem.in_alert ? 'is-void' : 'is-active'}">库存 ${formatQuantity(stockItem.on_hand)}</span>
+      </div>
+      <div class="detail-grid">
+        ${detailRow('SKU', escapeHtml(stockItem.sku || '-'))}
+        ${detailRow('分类', escapeHtml(stockItem.category || '未分类'))}
+        ${detailRow('单位', escapeHtml(stockItem.unit || '-'))}
+        ${detailRow('库存金额', `<span class="font-num">${formatCurrency(stockItem.inventory_value || 0)}</span>`)}
+      </div>
+      <div class="detail-section-title">最近流水</div>
+      <div class="card-list detail-list">${movementRows}</div>
+    </div>
+  `;
+
+  openModal('商品流水', body, () => closeModal(), { hideCancel: true, okText: '关闭' });
+}
+
+function movementTag(type) {
+  const normalized = String(type || '');
+  const baseType = normalized.replace(/_(void|restore)$/, '');
+  const cls = {
+    purchase: 'tag-blue',
+    sale: 'tag-green',
+    adjustment: 'tag-orange',
+  }[baseType] || '';
+  return `<span class="tag ${cls}">${escapeHtml(typeLabel(normalized))}</span>`;
+}
+
+function detailRow(label, value) {
+  return `
+    <div class="detail-row">
+      <span class="detail-label">${label}</span>
+      <span class="detail-value">${value}</span>
+    </div>
+  `;
+}
+
+export function unmount() {}

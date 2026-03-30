@@ -1,4 +1,4 @@
-import { getState, loadStatistics } from '../store.js';
+import { getState } from '../store.js';
 import { api } from '../api.js';
 import { formatCurrency, formatShortCurrency, formatQuantity, formatMonthLabel, escapeHtml, toast } from '../utils.js';
 
@@ -77,20 +77,12 @@ function render(container, stats) {
       <div class="section-header"><h3>核心指标</h3></div>
       <div class="metric-grid">
         <div class="metric-card">
-          <div class="metric-value ${(ov.net_amount || 0) >= 0 ? 'text-success' : 'text-danger'}">${formatShortCurrency(ov.net_amount || 0)}</div>
-          <div class="metric-label">净额</div>
-        </div>
-        <div class="metric-card">
           <div class="metric-value">${formatShortCurrency(ov.sale_amount || 0)}</div>
           <div class="metric-label">销售额</div>
         </div>
         <div class="metric-card">
           <div class="metric-value">${formatShortCurrency(ov.purchase_amount || 0)}</div>
           <div class="metric-label">采购额</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${ov.document_count || 0}</div>
-          <div class="metric-label">单据数</div>
         </div>
       </div>
     </div>
@@ -99,7 +91,7 @@ function render(container, stats) {
     <div class="page-section">
       <div class="section-header"><h3>月度趋势</h3></div>
       <div class="chart-container">
-        ${renderBarChart(monthly)}
+        ${renderLineChart(monthly)}
       </div>
     </div>` : ''}
 
@@ -147,27 +139,63 @@ function render(container, stats) {
   `;
 }
 
-function renderBarChart(monthly) {
+function renderLineChart(monthly) {
   if (!monthly.length) return '';
-  const maxVal = Math.max(...monthly.map(m => Math.max(Math.abs(m.purchase_amount || 0), Math.abs(m.sale_amount || 0))), 1);
-  const barWidth = Math.max(20, Math.floor((window.innerWidth - 60) / monthly.length) - 8);
+  const chartHeight = 220;
+  const chartWidth = Math.max(320, monthly.length * 72);
+  const margin = { top: 14, right: 12, bottom: 34, left: 44 };
+  const maxVal = Math.max(
+    ...monthly.map(m => Math.max(Number(m.purchase_amount) || 0, Number(m.sale_amount) || 0)),
+    1
+  );
+  const drawWidth = chartWidth - margin.left - margin.right;
+  const drawHeight = chartHeight - margin.top - margin.bottom;
+  const stepX = monthly.length > 1 ? drawWidth / (monthly.length - 1) : 0;
+
+  const toY = (value) => margin.top + drawHeight - (Math.max(0, Number(value) || 0) / maxVal) * drawHeight;
+  const buildPoints = (field) => monthly.map((item, idx) => ({
+    x: margin.left + stepX * idx,
+    y: toY(item[field]),
+    value: Number(item[field]) || 0,
+    label: formatMonthLabel(item.month),
+  }));
+  const toPath = (points) => points
+    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
+    .join(' ');
+
+  const purchasePoints = buildPoints('purchase_amount');
+  const salePoints = buildPoints('sale_amount');
 
   return `
-    <div class="bar-chart">
-      <div class="bar-chart-bars">
-        ${monthly.map(m => {
-          const pH = Math.round(Math.abs(m.purchase_amount || 0) / maxVal * 100);
-          const sH = Math.round(Math.abs(m.sale_amount || 0) / maxVal * 100);
-          return `
-            <div class="bar-group" style="width:${barWidth}px">
-              <div class="bar-pair">
-                <div class="bar bar-purchase" style="height:${pH}%" title="采购 ${formatCurrency(m.purchase_amount)}"></div>
-                <div class="bar bar-sale" style="height:${sH}%" title="销售 ${formatCurrency(m.sale_amount)}"></div>
-              </div>
-              <div class="bar-label">${formatMonthLabel(m.month)}</div>
-            </div>
-          `;
-        }).join('')}
+    <div class="line-chart">
+      <div class="line-chart-scroll">
+        <svg class="line-chart-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="月度采购与销售趋势图">
+          ${[1, 0.75, 0.5, 0.25, 0].map(level => {
+            const y = margin.top + drawHeight * (1 - level);
+            return `
+              <line x1="${margin.left}" y1="${y}" x2="${chartWidth - margin.right}" y2="${y}" class="line-grid"></line>
+              <text x="${margin.left - 8}" y="${y + 4}" class="line-grid-label">${formatShortCurrency(maxVal * level)}</text>
+            `;
+          }).join('')}
+
+          <path d="${toPath(purchasePoints)}" class="line-path line-path-purchase"></path>
+          <path d="${toPath(salePoints)}" class="line-path line-path-sale"></path>
+
+          ${purchasePoints.map(p => `
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" class="line-point line-point-purchase">
+              <title>${p.label} 采购 ${formatCurrency(p.value)}</title>
+            </circle>
+          `).join('')}
+          ${salePoints.map(p => `
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" class="line-point line-point-sale">
+              <title>${p.label} 销售 ${formatCurrency(p.value)}</title>
+            </circle>
+          `).join('')}
+
+          ${monthly.map((item, idx) => `
+            <text x="${margin.left + stepX * idx}" y="${chartHeight - 12}" text-anchor="middle" class="line-axis-label">${formatMonthLabel(item.month)}</text>
+          `).join('')}
+        </svg>
       </div>
       <div class="chart-legend">
         <span class="legend-item"><span class="legend-dot legend-purchase"></span>采购</span>

@@ -240,10 +240,21 @@ export function closeConfirm() {
   confirmCallback = null;
 }
 
-export function openModal(title, body, onOk) {
+export function openModal(title, body, onOk, options = {}) {
+  const {
+    hideCancel = false,
+    hideOk = false,
+    cancelText = '取消',
+    okText = '确定',
+  } = options;
+
   modalTitleEl.textContent = title;
   modalBodyEl.innerHTML = body;
   modalOnOk = onOk;
+  modalCancelBtn.hidden = !!hideCancel;
+  modalOkBtn.hidden = !!hideOk;
+  modalCancelBtn.textContent = cancelText;
+  modalOkBtn.textContent = okText;
   modalBackdrop.classList.add('show');
   modalDialog.classList.add('show');
   document.body.style.overflow = 'hidden';

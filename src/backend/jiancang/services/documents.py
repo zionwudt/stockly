@@ -20,6 +20,7 @@ class DocumentServiceMixin:
         query = """
         SELECT
             m.id,
+            m.product_id,
             m.movement_type,
             m.quantity_delta,
             m.unit_price,
@@ -64,13 +65,15 @@ class DocumentServiceMixin:
             d.status,
             d.created_at,
             COALESCE(p.name, '库存调整') AS partner_name,
-            COUNT(i.id) AS item_count
+            (
+                SELECT COUNT(1)
+                FROM document_items di
+                WHERE di.document_id = d.id AND di.tenant_id = d.tenant_id
+            ) AS item_count
         FROM documents d
         LEFT JOIN partners p ON p.id = d.partner_id AND p.tenant_id = d.tenant_id
-        LEFT JOIN document_items i ON i.document_id = d.id AND i.tenant_id = d.tenant_id
         WHERE d.tenant_id = ?
         {type_filter}
-        GROUP BY d.id
         ORDER BY d.created_at DESC, d.id DESC
         LIMIT ?
         """
@@ -78,7 +81,46 @@ class DocumentServiceMixin:
 
         with get_connection(self.db_path) as connection:
             rows = connection.execute(query, tuple(parameters)).fetchall()
-        return [dict(row) for row in rows]
+            documents = [dict(row) for row in rows]
+            if not documents:
+                return documents
+
+            document_ids = [int(row["id"]) for row in documents]
+            placeholders = ", ".join("?" for _ in document_ids)
+            item_query = f"""
+            SELECT
+                i.document_id,
+                COALESCE(p.name, '商品已删除') AS product_name,
+                i.quantity,
+                i.unit_price
+            FROM document_items i
+            LEFT JOIN products p ON p.id = i.product_id AND p.tenant_id = i.tenant_id
+            WHERE i.tenant_id = ?
+              AND i.document_id IN ({placeholders})
+            ORDER BY i.document_id ASC, i.id ASC
+            """
+            item_rows = connection.execute(
+                item_query,
+                (context.tenant_id, *document_ids),
+            ).fetchall()
+
+        items_by_doc: dict[int, list[dict[str, Any]]] = {
+            document_id: [] for document_id in document_ids
+        }
+        for row in item_rows:
+            document_id = int(row["document_id"])
+            items_by_doc.setdefault(document_id, []).append(
+                {
+                    "product_name": row["product_name"],
+                    "quantity": row["quantity"],
+                    "unit_price": row["unit_price"],
+                }
+            )
+
+        for document in documents:
+            document["items"] = items_by_doc.get(int(document["id"]), [])
+
+        return documents
 
     def create_purchase(
         self, context: RequestContext, payload: dict[str, Any]
@@ -183,6 +225,30 @@ class DocumentServiceMixin:
 
         return {"message": "单据已作废"}
 
+    def restore_document(
+        self, context: RequestContext, document_id: int
+    ) -> dict[str, Any]:
+        with get_connection(self.db_path) as connection:
+            doc_row = connection.execute(
+                "SELECT id, status FROM documents WHERE id = ? AND tenant_id = ?",
+                (document_id, context.tenant_id),
+            ).fetchone()
+
+            if doc_row is None:
+                raise ValidationError("单据不存在。")
+            if doc_row["status"] != "void":
+                raise ValidationError("该单据当前不是作废状态。")
+
+            self._restore_stock_movements(connection, context.tenant_id, document_id)
+
+            connection.execute(
+                "UPDATE documents SET status = 'active', voided_at = NULL, void_reason = NULL WHERE id = ?",
+                (document_id,),
+            )
+            connection.commit()
+
+        return {"message": "单据已恢复"}
+
     def _void_stock_movements(
         self,
         connection: sqlite3.Connection,
@@ -209,6 +275,46 @@ class DocumentServiceMixin:
                     -m["quantity_delta"],
                     m["unit_price"],
                     f"作废冲销: {m['note']}" if m["note"] else "作废冲销",
+                ),
+            )
+
+    def _restore_stock_movements(
+        self,
+        connection: sqlite3.Connection,
+        tenant_id: int,
+        document_id: int,
+    ) -> None:
+        movements = connection.execute(
+            """
+            SELECT product_id, movement_type, quantity_delta, unit_price, note
+            FROM stock_movements
+            WHERE document_id = ? AND tenant_id = ? AND movement_type LIKE '%_void'
+            """,
+            (document_id, tenant_id),
+        ).fetchall()
+
+        if not movements:
+            raise ValidationError("该单据没有可恢复的冲销记录。")
+
+        for m in movements:
+            movement_type = m["movement_type"]
+            if movement_type.endswith("_void"):
+                restore_type = movement_type[:-5] + "_restore"
+            else:
+                restore_type = movement_type + "_restore"
+            connection.execute(
+                """
+                INSERT INTO stock_movements (tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    m["product_id"],
+                    document_id,
+                    restore_type,
+                    -m["quantity_delta"],
+                    m["unit_price"],
+                    f"恢复单据: {m['note']}" if m["note"] else "恢复单据",
                 ),
             )
 

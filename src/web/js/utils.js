@@ -51,7 +51,17 @@ export function formatMonthLabel(ym) {
 }
 
 export function typeLabel(type) {
-  return { purchase: '采购入库', sale: '销售出库', adjustment: '库存调整' }[type] || type;
+  return {
+    purchase: '采购入库',
+    sale: '销售出库',
+    adjustment: '库存调整',
+    purchase_void: '采购冲销',
+    sale_void: '销售冲销',
+    adjustment_void: '调整冲销',
+    purchase_restore: '采购恢复',
+    sale_restore: '销售恢复',
+    adjustment_restore: '调整恢复',
+  }[type] || type;
 }
 
 export function typeTag(type) {
@@ -80,19 +90,38 @@ export function toast(msg, type = 'info') {
 }
 
 /**
- * Bind swipe-to-delete on a card-list container.
+ * Bind swipe actions on a list container.
  * Each .swipe-wrap > .swipe-content can be swiped left to reveal .swipe-action.
  */
-export function bindSwipeDelete(listEl, onDelete) {
-  let startX = 0, currentX = 0, swiping = false, activeEl = null;
-  const THRESHOLD = 60;
+export function bindSwipeActions(listEl, options = {}) {
+  if (!listEl) return () => {};
 
-  function resetAll() {
-    listEl.querySelectorAll('.swipe-content').forEach(el => {
+  const contentSelector = options.contentSelector || '.swipe-content';
+  const wrapSelector = options.wrapSelector || '.swipe-wrap';
+  const actionSelector = options.actionSelector || '.swipe-action';
+  const actionWidth = Number(options.actionWidth || 72);
+  const threshold = Number(options.threshold || 60);
+  const onAction = options.onAction;
+
+  let startX = 0;
+  let currentX = 0;
+  let swiping = false;
+  let activeEl = null;
+
+  function closeItem(el) {
+    if (!el) return;
+    el.classList.remove('swiping');
+    el.style.transform = '';
+    if (activeEl === el) activeEl = null;
+  }
+
+  function resetAll(exceptEl = null) {
+    listEl.querySelectorAll(contentSelector).forEach(el => {
+      if (exceptEl && el === exceptEl) return;
       el.style.transform = '';
       el.classList.remove('swiping');
     });
-    activeEl = null;
+    if (!exceptEl) activeEl = null;
   }
 
   listEl.addEventListener('touchstart', (e) => {
@@ -100,9 +129,9 @@ export function bindSwipeDelete(listEl, onDelete) {
     if (activeEl && !activeEl.contains(e.target)) {
       resetAll();
     }
-    const wrap = e.target.closest('.swipe-wrap');
+    const wrap = e.target.closest(wrapSelector);
     if (!wrap) return;
-    const content = wrap.querySelector('.swipe-content');
+    const content = wrap.querySelector(contentSelector);
     if (!content) return;
     startX = e.touches[0].clientX;
     currentX = startX;
@@ -116,37 +145,60 @@ export function bindSwipeDelete(listEl, onDelete) {
     currentX = e.touches[0].clientX;
     let dx = currentX - startX;
     if (dx > 0) dx = 0; // only left
-    if (dx < -72) dx = -72;
+    if (dx < -actionWidth) dx = -actionWidth;
     activeEl.style.transform = `translateX(${dx}px)`;
   }, { passive: true });
 
-  listEl.addEventListener('touchend', () => {
+  function finalizeSwipe() {
     if (!swiping || !activeEl) return;
     swiping = false;
     activeEl.classList.remove('swiping');
     const dx = currentX - startX;
-    if (dx < -THRESHOLD) {
-      activeEl.style.transform = 'translateX(-72px)';
+    if (dx < -threshold) {
+      activeEl.style.transform = `translateX(${-actionWidth}px)`;
     } else {
-      activeEl.style.transform = '';
-      activeEl = null;
+      closeItem(activeEl);
     }
-  });
+  }
 
-  // handle delete button click
+  listEl.addEventListener('touchend', finalizeSwipe);
+  listEl.addEventListener('touchcancel', finalizeSwipe);
+
+  // handle action button click
   listEl.addEventListener('click', (e) => {
-    const delBtn = e.target.closest('.swipe-action');
-    if (!delBtn) return;
+    const actionBtn = e.target.closest(actionSelector);
+    if (!actionBtn || !listEl.contains(actionBtn)) return;
     e.stopPropagation();
-    const id = delBtn.dataset.deleteId;
-    const name = delBtn.dataset.deleteName || '';
-    if (id && onDelete) onDelete(id, name);
+    if (onAction) onAction(actionBtn, e);
+    resetAll();
   });
 
   // clicking on content area closes open swipe
   listEl.addEventListener('click', (e) => {
-    if (e.target.closest('.swipe-action')) return;
+    if (e.target.closest(actionSelector)) return;
+    const hitContent = e.target.closest(contentSelector);
+    if (hitContent && hitContent.style.transform) {
+      e.stopPropagation();
+      e.preventDefault();
+      closeItem(hitContent);
+      return;
+    }
     resetAll();
   });
+
+  return () => resetAll();
 }
 
+/**
+ * Bind swipe-to-delete on a card-list container.
+ * Each .swipe-wrap > .swipe-content can be swiped left to reveal .swipe-action.
+ */
+export function bindSwipeDelete(listEl, onDelete) {
+  return bindSwipeActions(listEl, {
+    onAction: (actionBtn) => {
+      const id = actionBtn.dataset.deleteId;
+      const name = actionBtn.dataset.deleteName || '';
+      if (id && onDelete) onDelete(id, name);
+    },
+  });
+}
