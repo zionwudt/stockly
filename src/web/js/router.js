@@ -110,8 +110,9 @@ export function start(container, header) {
 
   confirmCancelBtn.addEventListener('click', closeConfirm);
   confirmOkBtn.addEventListener('click', () => {
+    const cb = confirmCallback;
     closeConfirm();
-    if (confirmCallback) confirmCallback();
+    if (cb) cb();
   });
   confirmBackdrop.addEventListener('click', closeConfirm);
 
@@ -327,6 +328,22 @@ export function currentPath() {
   return window.location.hash.slice(1) || '/';
 }
 
+// Allow pages to inject an action button into the header-right area
+export function setHeaderAction(html, onClick) {
+  const right = document.getElementById('header-right-action');
+  if (!right) return;
+  right.innerHTML = html;
+  if (onClick) {
+    const btn = right.querySelector('button, a');
+    if (btn) btn.addEventListener('click', onClick);
+  }
+}
+
+export function clearHeaderAction() {
+  const right = document.getElementById('header-right-action');
+  if (right) right.innerHTML = '';
+}
+
 function currentNavPath() {
   let resolved = resolveRoute();
   if (!resolved) return normalizePath(currentPath());
@@ -343,6 +360,9 @@ function handleRoute() {
   if (!resolved) { navigate('/'); return; }
 
   if (currentPage && currentPage.unmount) currentPage.unmount();
+
+  // Clear any page-specific header action
+  clearHeaderAction();
 
   pageContainer.innerHTML = '';
   currentPage = resolved.config.module;

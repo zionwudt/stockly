@@ -11,8 +11,10 @@ export function openSaleModal() {
       <div class="form-field">
         <label>客户</label>
         <select name="partner_id" class="form-input" required>
-          <option value="">请选择客户</option>
-          ${customers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+          ${customers.length === 1
+            ? `<option value="${customers[0].id}" selected>${escapeHtml(customers[0].name)}</option>`
+            : `<option value="">请选择客户</option>${customers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}`
+          }
         </select>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -77,14 +79,18 @@ export function openSaleModal() {
 }
 
 function saleLineHtml(products) {
+  const solo = products.length === 1 ? products[0] : null;
+  const defaultPrice = solo ? Number(solo.sale_price).toFixed(2) : '';
   return `
     <div class="line-item">
       <div class="form-row form-row-3">
         <div class="form-field">
           <label>商品</label>
           <select name="product_id" class="form-input" required>
-            <option value="">选择</option>
-            ${products.map(p => `<option value="${p.id}" data-sale-price="${p.sale_price}">${escapeHtml(p.name)}</option>`).join('')}
+            ${solo
+              ? `<option value="${solo.id}" data-sale-price="${solo.sale_price}" selected>${escapeHtml(solo.name)}</option>`
+              : `<option value="">选择</option>${products.map(p => `<option value="${p.id}" data-sale-price="${p.sale_price}">${escapeHtml(p.name)}</option>`).join('')}`
+            }
           </select>
         </div>
         <div class="form-field">
@@ -93,7 +99,7 @@ function saleLineHtml(products) {
         </div>
         <div class="form-field">
           <label>单价</label>
-          <input name="unit_price" class="form-input" type="number" min="0" step="0.01" placeholder="0" required>
+          <input name="unit_price" class="form-input" type="number" min="0" step="0.01" placeholder="0" value="${defaultPrice}" required>
         </div>
       </div>
       <button type="button" class="line-item-remove" data-remove-row>删除</button>

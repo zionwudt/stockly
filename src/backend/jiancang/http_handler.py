@@ -228,7 +228,17 @@ class JianCangHandler(BaseHTTPRequestHandler):
             result = self.service.review_join_request(principal, request_id, approved)
             self._send_json(result)
             return True
-        
+
+        transfer_match = re.fullmatch(r"/api/tenants/(\d+)/transfer-ownership", path)
+        if transfer_match:
+            principal = self._require_principal()
+            if principal is None:
+                return True
+            tenant_id = int(transfer_match.group(1))
+            result = self.service.transfer_ownership(principal, tenant_id, payload)
+            self._send_json(result)
+            return True
+
         return False
 
     def _handle_auth_put(self, path: str, payload: dict) -> bool:

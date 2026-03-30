@@ -1,82 +1,162 @@
 import { getState } from '../store.js';
 import { api } from '../api.js';
-import { openModal, closeModal, openConfirm } from '../router.js';
+import { openModal, closeModal, openConfirm, setHeaderAction } from '../router.js';
 import {
   formatCurrency,
   formatQuantity,
   escapeHtml,
   toast,
-  bindSwipeDelete,
 } from '../utils.js';
 
+const PAGE_SIZE = 50;
+let visibleCount = PAGE_SIZE;
+let keyword = '';
+
 export function mount(container) {
+  visibleCount = PAGE_SIZE;
+  keyword = '';
+  render(container);
+  bindEvents(container);
+
+  setHeaderAction(
+    `<button class="header-add-btn" id="header-product-add-btn" aria-label="新增商品">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>`,
+    () => openProductModal()
+  );
+}
+
+function render(container) {
   const { products } = getState();
 
   container.innerHTML = `
     <div class="page-section">
-      <div class="card-list" id="product-list"></div>
-      <button type="button" class="btn-fab" id="product-create-btn">+</button>
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="product-search" type="text" placeholder="搜索商品名称或SKU" value="${escapeHtml(keyword)}">
+      </div>
+    </div>
+    <div class="page-section" style="padding-top:0;">
+      <div id="product-list"></div>
+      <div id="product-load-more" class="load-more-hint" style="display:none;">下拉加载更多</div>
     </div>
   `;
 
   renderList(container, products);
-  bindEvents(container, products);
+  bindScrollEvents(container, products);
+}
+
+function getFiltered(products) {
+  const kw = keyword.trim().toLowerCase();
+  if (!kw) return products;
+  return products.filter(p =>
+    String(p.name || '').toLowerCase().includes(kw) ||
+    String(p.sku || '').toLowerCase().includes(kw)
+  );
 }
 
 function renderList(container, products) {
+  const filtered = getFiltered(products);
   const el = container.querySelector('#product-list');
-  if (!products.length) {
-    el.innerHTML = '<div class="empty-hint">暂无商品，点击右下角新增</div>';
+  const loadMoreEl = container.querySelector('#product-load-more');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-hint">暂无商品</div>';
+    if (loadMoreEl) loadMoreEl.style.display = 'none';
     return;
   }
 
-  el.innerHTML = products.map((p) => `
-    <div class="swipe-wrap">
-      <div class="swipe-content">
-        <div class="list-item" data-id="${p.id}">
-          <div class="list-item-main">
-            <div class="list-item-title">${escapeHtml(p.name)}</div>
-            <div class="list-item-desc">
-              ${escapeHtml(p.sku)}${p.category ? ' · ' + escapeHtml(p.category) : ''} · ${escapeHtml(p.unit || '件')}
-            </div>
-            <div class="list-item-desc">
-              采购价 ${formatCurrency(p.purchase_price)} · 销售价 ${formatCurrency(p.sale_price)}
-            </div>
-          </div>
-          <div class="list-item-right">
-            <div class="font-num ${isLowStock(p) ? 'text-danger' : ''}">${formatQuantity(p.on_hand || 0)}</div>
-            <div class="list-item-sub">库存</div>
-          </div>
-        </div>
-      </div>
-      <div class="swipe-action" data-delete-id="${p.id}" data-delete-name="${escapeHtml(p.name)}">删除</div>
-    </div>
-  `).join('');
+  const slice = filtered.slice(0, visibleCount);
+  el.innerHTML = slice.map(p => renderProductCard(p)).join('');
+  if (loadMoreEl) {
+    loadMoreEl.style.display = filtered.length > visibleCount ? 'block' : 'none';
+  }
 }
 
-function bindEvents(container, products) {
-  container.querySelector('#product-create-btn').addEventListener('click', () => {
-    openProductModal();
-  });
+function renderProductCard(p) {
+  const low = isLowStock(p);
+  return `
+    <div class="item-card" data-id="${p.id}">
+      <div class="item-card-main">
+        <div class="item-card-header">
+          <span class="item-card-title">${escapeHtml(p.name)}</span>
+          <div class="item-card-stock ${low ? 'item-card-stock-low' : ''}">
+            <span class="font-num">${formatQuantity(p.on_hand || 0)}</span>
+            <span class="item-card-stock-label">库存</span>
+          </div>
+        </div>
+        <div class="item-card-tags">
+          <span class="item-tag">${escapeHtml(p.sku)}</span>
+          ${p.category ? `<span class="item-tag">${escapeHtml(p.category)}</span>` : ''}
+          <span class="item-tag">${escapeHtml(p.unit || '件')}</span>
+        </div>
+        <div class="item-card-prices">
+          <span class="item-price-label">采 <span class="item-price-val">${formatCurrency(p.purchase_price)}</span></span>
+          <span class="item-price-sep">·</span>
+          <span class="item-price-label">售 <span class="item-price-val">${formatCurrency(p.sale_price)}</span></span>
+          ${p.safety_stock ? `<span class="item-price-sep">·</span><span class="item-price-label ${low ? 'text-danger' : ''}">安全库存 ${formatQuantity(p.safety_stock)}</span>` : ''}
+        </div>
+      </div>
+      <div class="item-card-footer">
+        <button class="item-action-btn" data-edit-id="${p.id}">编辑</button>
+        <button class="item-action-btn btn-danger" data-delete-id="${p.id}" data-delete-name="${escapeHtml(p.name)}">删除</button>
+      </div>
+    </div>
+  `;
+}
 
-  container.querySelector('#product-list').addEventListener('click', (e) => {
-    if (e.target.closest('.swipe-action')) return;
-    const item = e.target.closest('.list-item');
-    if (!item) return;
-    const product = products.find(p => String(p.id) === item.dataset.id);
-    if (product) openProductModal(product);
-  });
-
-  bindSwipeDelete(container.querySelector('#product-list'), (id, name) => {
-    openConfirm('删除商品', `确定要删除商品"${name}"吗？`, async () => {
-      try {
-        await api.deleteProduct(Number(id));
-        await window.__app.refreshData('商品已删除');
-      } catch (err) {
-        toast(err.message || '删除失败', 'error');
-      }
+function bindEvents(container) {
+  const searchInput = container.querySelector('#product-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      keyword = searchInput.value || '';
+      visibleCount = PAGE_SIZE;
+      renderList(container, getState().products);
     });
+  }
+
+  const productList = container.querySelector('#product-list');
+  if (!productList) return;
+
+  productList.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.item-action-btn[data-edit-id]');
+    if (editBtn) {
+      const product = getState().products.find(p => String(p.id) === editBtn.dataset.editId);
+      if (product) openProductModal(product);
+      return;
+    }
+
+    const deleteBtn = e.target.closest('.item-action-btn[data-delete-id]');
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.deleteId;
+      const name = deleteBtn.dataset.deleteName || '';
+      openConfirm('删除商品', `确定要删除商品"${name}"吗？`, async () => {
+        try {
+          await api.deleteProduct(Number(id));
+          await window.__app.refreshData('商品已删除');
+        } catch (err) {
+          toast(err.message || '删除失败', 'error');
+        }
+      });
+    }
   });
+}
+
+function bindScrollEvents(container, products) {
+  const scroller = document.querySelector('.app-content') || window;
+  const loadMoreEl = container.querySelector('#product-load-more');
+  const onScroll = () => {
+    const scrollEl = scroller === window ? document.documentElement : scroller;
+    const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+    if (distFromBottom < 120 && loadMoreEl && loadMoreEl.style.display !== 'none') {
+      visibleCount += PAGE_SIZE;
+      renderList(container, getState().products);
+    }
+  };
+  scroller.addEventListener('scroll', onScroll, { passive: true });
+  container._productScrollCleanup = () => scroller.removeEventListener('scroll', onScroll);
 }
 
 function openProductModal(product = null) {
@@ -142,5 +222,11 @@ function isLowStock(p) {
 function fv(value) { return escapeHtml(String(value ?? '')); }
 function nv(value, fallback) { return value ?? fallback; }
 
-export function unmount() {}
+export function unmount() {
+  const container = document.getElementById('page');
+  if (container && container._productScrollCleanup) {
+    container._productScrollCleanup();
+    delete container._productScrollCleanup;
+  }
+}
 

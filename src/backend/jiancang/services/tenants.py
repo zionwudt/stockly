@@ -379,21 +379,57 @@ class TenantServiceMixin:
         
         return {"message": "成员已移除。"}
 
-    def _next_tenant_slug(self, connection: sqlite3.Connection, name: str) -> str:
-        base = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-")
-        base = re.sub(r"-{2,}", "-", base)
-        if not base:
-            base = "tenant"
-        base = base[:24].rstrip("-") or "tenant"
-        candidate = base
-        suffix = 2
+    def transfer_ownership(self, principal: SessionPrincipal, tenant_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        """Transfer ownership of a tenant to another member."""
+        target_user_id = int(payload.get("user_id") or 0)
+        if not target_user_id:
+            raise ValidationError("请指定转让对象。")
 
-        while True:
+        with get_connection(self.db_path) as connection:
+            current_membership = connection.execute(
+                "SELECT role FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+                (tenant_id, principal.user_id),
+            ).fetchone()
+            if not current_membership or current_membership["role"] != "owner":
+                raise ValidationError("只有所有者可以转让团队。")
+
+            target_membership = connection.execute(
+                "SELECT role FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+                (tenant_id, target_user_id),
+            ).fetchone()
+            if not target_membership:
+                raise ValidationError("该用户不是此团队的成员。")
+            if target_user_id == principal.user_id:
+                raise ValidationError("不能将团队转让给自己。")
+
+            # Transfer: new owner gets 'owner', old owner becomes 'admin'
+            connection.execute(
+                "UPDATE tenant_memberships SET role = 'owner' WHERE tenant_id = ? AND user_id = ?",
+                (tenant_id, target_user_id),
+            )
+            connection.execute(
+                "UPDATE tenant_memberships SET role = 'admin' WHERE tenant_id = ? AND user_id = ?",
+                (tenant_id, principal.user_id),
+            )
+            # Update tenants.owner_user_id
+            connection.execute(
+                "UPDATE tenants SET owner_user_id = ? WHERE id = ?",
+                (target_user_id, tenant_id),
+            )
+            connection.commit()
+
+        return {"message": "团队所有权已转让。"}
+
+    def _next_tenant_slug(self, connection: sqlite3.Connection, name: str) -> str:
+        import random
+        # Generate a QQ-style friendly numeric slug: t- + 9 digits
+        for attempt in range(100):
+            suffix = "".join(random.choices("0123456789", k=9))
+            candidate = f"t-{suffix}"
             exists = connection.execute(
                 "SELECT 1 FROM tenants WHERE slug = ? LIMIT 1",
                 (candidate,),
             ).fetchone()
             if exists is None:
                 return candidate
-            candidate = f"{base[: max(1, 32 - len(str(suffix)) - 1)]}-{suffix}"
-            suffix += 1
+        raise ValidationError("无法生成唯一的团队标识，请稍后重试。")

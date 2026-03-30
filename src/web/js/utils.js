@@ -31,11 +31,13 @@ export function signedQuantity(n) {
 export function formatDateTime(iso) {
   if (!iso) return '-';
   const d = new Date(iso);
-  const M = d.getMonth() + 1;
-  const D = d.getDate();
+  const y = d.getFullYear();
+  const M = String(d.getMonth() + 1).padStart(2, '0');
+  const D = String(d.getDate()).padStart(2, '0');
   const h = String(d.getHours()).padStart(2, '0');
   const m = String(d.getMinutes()).padStart(2, '0');
-  return `${M}/${D} ${h}:${m}`;
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${y}-${M}-${D} ${h}:${m}:${s}`;
 }
 
 export function formatDate(iso) {

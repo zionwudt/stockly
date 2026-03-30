@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { escapeHtml, formatDateTime, toast } from '../utils.js';
 import { openConfirm, openModal, closeModal } from '../router.js';
-import { navigate, back } from '../router.js';
+import { navigate } from '../router.js';
 
 const CHEVRON = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`;
 
@@ -62,7 +62,7 @@ function render(container) {
               <span class="settings-item-value">${escapeHtml(tenant.slug)}</span>
             </div>
             <div class="settings-item">
-              <span class="settings-text">创建者</span>
+              <span class="settings-text">所有者</span>
               <span class="settings-item-value">${escapeHtml(tenant.owner_display_name || tenant.owner_username)}</span>
             </div>
             <div class="settings-item">
@@ -81,18 +81,23 @@ function render(container) {
         </div>
         <div class="settings-card">
           <div class="settings-menu">
-            ${members.map(m => `
-              <div class="settings-item${isOwner && m.role !== 'owner' ? ' profile-row' : ''}" ${isOwner && m.role !== 'owner' ? `data-member-id="${m.user_id}" data-member-role="${m.role}" data-member-name="${escapeHtml(m.display_name || m.username)}" role="button" tabindex="0"` : ''}>
-                <span class="settings-text">
-                  ${escapeHtml(m.display_name || m.username)}
-                  <span class="tag ${m.role === 'owner' ? 'tag-green' : m.role === 'admin' ? 'tag-blue' : 'tag-orange'}" style="margin-left:6px">
-                    ${{ owner: '创建者', admin: '管理员', member: '成员' }[m.role] || m.role}
-                  </span>
-                </span>
-                <span class="settings-item-value" style="font-size:12px">${formatDateTime(m.joined_at)}</span>
-                ${isOwner && m.role !== 'owner' ? `<div class="settings-arrow">${CHEVRON}</div>` : ''}
-              </div>
-            `).join('')}
+            ${members.map(m => {
+              const canManage = isOwner && m.role !== 'owner';
+              const roleLabel = { owner: '所有者', admin: '管理员', member: '成员' }[m.role] || m.role;
+              const roleClass = m.role === 'owner' ? 'tag-green' : m.role === 'admin' ? 'tag-blue' : 'tag-orange';
+              return `
+              <div class="settings-item member-item${canManage ? ' profile-row' : ''}"
+                ${canManage ? `data-member-id="${m.user_id}" data-member-role="${m.role}" data-member-name="${escapeHtml(m.display_name || m.username)}"` : ''}
+                ${canManage ? 'role="button" tabindex="0"' : ''}>
+                <div class="member-item-avatar">${(m.display_name || m.username || '?')[0].toUpperCase()}</div>
+                <div class="member-item-info">
+                  <div class="member-item-name">${escapeHtml(m.display_name || m.username)}</div>
+                  <div class="member-item-meta">${formatDateTime(m.joined_at)}</div>
+                </div>
+                <span class="tag ${roleClass}" style="flex-shrink:0;margin-right:${canManage ? '6px' : '0'}">${roleLabel}</span>
+                ${canManage ? `<div class="settings-arrow">${CHEVRON}</div>` : ''}
+              </div>`;
+            }).join('')}
           </div>
         </div>
       </div>
@@ -203,33 +208,68 @@ function openEditNameModal(container) {
 }
 
 function openMemberActionModal(container, userId, currentRole, memberName) {
-  const newRole = currentRole === 'admin' ? 'member' : 'admin';
-  const roleLabel = newRole === 'admin' ? '设为管理员' : '降为成员';
+  const isAdmin = currentRole === 'admin';
+  const toggleRoleLabel = isAdmin ? '撤销管理员' : '设为管理员';
+  const toggleRoleIcon = isAdmin
+    ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`;
 
   openModal(
-    `管理成员`,
-    `<div class="settings-card">
+    `成员管理`,
+    `<p class="modal-member-name">${escapeHtml(memberName)}</p>
+     <div class="settings-card" style="margin-top:10px">
        <div class="settings-menu">
-         <button class="settings-item profile-row" id="modal-change-role">
-           <span class="settings-text">${roleLabel}</span>
+         <button class="settings-item profile-row" id="modal-transfer-owner">
+           <div class="menu-icon menu-icon-blue" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
+             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+           </div>
+           <span class="settings-text">转让所有权</span>
            <div class="settings-arrow">${CHEVRON}</div>
          </button>
-         <button class="settings-item profile-row danger" id="modal-remove-member">
-           <span class="settings-text">移除成员</span>
+         <button class="settings-item profile-row" id="modal-change-role">
+           <div class="menu-icon ${isAdmin ? 'menu-icon-orange' : 'menu-icon-blue'}" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
+             ${toggleRoleIcon}
+           </div>
+           <span class="settings-text">${toggleRoleLabel}</span>
+           <div class="settings-arrow">${CHEVRON}</div>
+         </button>
+         <button class="settings-item profile-row" id="modal-remove-member" style="color:var(--danger)">
+           <div class="menu-icon menu-icon-red" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
+             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+           </div>
+           <span class="settings-text" style="color:var(--danger)">移除成员</span>
            <div class="settings-arrow">${CHEVRON}</div>
          </button>
        </div>
-     </div>
-     <p style="font-size:12px;color:var(--text-3);margin-top:10px;text-align:center">${escapeHtml(memberName)}</p>`,
+     </div>`,
     () => closeModal(),
+    { okText: '关闭', hideCancel: true },
   );
 
   requestAnimationFrame(() => {
-    document.getElementById('modal-change-role')?.addEventListener('click', () => {
+    document.getElementById('modal-transfer-owner')?.addEventListener('click', () => {
       closeModal();
       openConfirm(
+        '转让所有权',
+        `确定要将团队所有权转让给 ${memberName} 吗？转让后你将成为管理员。`,
+        async () => {
+          try {
+            await api.transferOwnership(currentTenantId, { user_id: userId });
+            await loadTenantDetail(container);
+            toast('所有权已转让', 'success');
+          } catch (err) {
+            toast(err.message || '转让失败', 'error');
+          }
+        }
+      );
+    });
+
+    document.getElementById('modal-change-role')?.addEventListener('click', () => {
+      closeModal();
+      const newRole = isAdmin ? 'member' : 'admin';
+      openConfirm(
         '确认修改角色',
-        `确定要将 ${memberName} ${roleLabel}吗？`,
+        `确定要将 ${memberName} ${toggleRoleLabel}吗？`,
         async () => {
           try {
             await api.updateMemberRole(currentTenantId, userId, { role: newRole });

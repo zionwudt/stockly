@@ -1,5 +1,5 @@
 import { getState } from '../store.js';
-import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeLabel, escapeHtml, bindSwipeActions } from '../utils.js';
+import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeLabel, escapeHtml } from '../utils.js';
 import { openModal, closeModal } from '../router.js';
 import { openAdjustmentModal } from './adjustment.js';
 
@@ -58,24 +58,23 @@ function renderStockList(container, stock) {
   }
 
   el.innerHTML = filtered.map(s => `
-    <div class="swipe-wrap">
-      <div class="swipe-content">
-        <div class="list-item" data-stock-id="${s.id}">
-          <div class="list-item-main">
-            <div class="list-item-title">
-              ${s.in_alert ? '<span class="dot dot-danger"></span>' : ''}
-              ${escapeHtml(s.name)}
-            </div>
-            <div class="list-item-desc">${escapeHtml(s.sku)}${s.category ? ' · ' + escapeHtml(s.category) : ''}</div>
+    <div class="list-item" data-stock-id="${s.id}">
+      <div class="list-item-body">
+        <div class="list-item-main">
+          <div class="list-item-title">
+            ${s.in_alert ? '<span class="dot dot-danger"></span>' : ''}
+            ${escapeHtml(s.name)}
           </div>
-          <div class="list-item-right">
-            <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
-            <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
-          </div>
+          <div class="list-item-desc">${escapeHtml(s.sku)}${s.category ? ' · ' + escapeHtml(s.category) : ''}</div>
+        </div>
+        <div class="list-item-right">
+          <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
+          <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
         </div>
       </div>
-      <div class="swipe-action swipe-action-primary" data-stock-action="adjust" data-stock-id="${s.id}">
-        调整
+      <div class="list-item-footer">
+        <button class="item-action-btn" data-stock-action="detail" data-stock-id="${s.id}">查看详情</button>
+        <button class="item-action-btn btn-accent" data-stock-action="adjust" data-stock-id="${s.id}">调整库存</button>
       </div>
     </div>
   `).join('');
@@ -102,23 +101,18 @@ function bindEvents(container) {
   if (!stockList) return;
 
   stockList.addEventListener('click', (e) => {
-    if (e.target.closest('.swipe-action')) return;
-    const item = e.target.closest('.list-item[data-stock-id]');
-    if (!item) return;
-    const productId = Number(item.dataset.stockId);
-    const product = getState().stock.find(s => Number(s.id) === productId);
-    if (product) {
-      openStockMovementModal(product);
-    }
-  });
+    const actionBtn = e.target.closest('.item-action-btn[data-stock-action]');
+    if (!actionBtn) return;
 
-  bindSwipeActions(stockList, {
-    onAction: (actionBtn) => {
-      if (actionBtn.dataset.stockAction !== 'adjust') return;
-      const productId = Number(actionBtn.dataset.stockId);
-      if (!productId) return;
+    const productId = Number(actionBtn.dataset.stockId);
+    if (!productId) return;
+
+    if (actionBtn.dataset.stockAction === 'detail') {
+      const product = getState().stock.find(s => Number(s.id) === productId);
+      if (product) openStockMovementModal(product);
+    } else if (actionBtn.dataset.stockAction === 'adjust') {
       openAdjustmentModal(productId);
-    },
+    }
   });
 }
 

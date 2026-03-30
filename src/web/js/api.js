@@ -45,6 +45,7 @@ export const api = {
   updateTenantName: (id, d) => put(`/api/tenants/${id}/name`, d),
   updateMemberRole: (tenantId, userId, d) => put(`/api/tenants/${tenantId}/members/${userId}/role`, d),
   removeMember: (tenantId, userId) => del(`/api/tenants/${tenantId}/members/${userId}`, {}),
+  transferOwnership: (tenantId, d) => post(`/api/tenants/${tenantId}/transfer-ownership`, d),
 
   // Workspace data
   summary: () => get('/api/summary'),

@@ -33,6 +33,15 @@ class StatisticsServiceMixin:
             top_products = self._statistics_top_products(
                 connection, context.tenant_id, start, end
             )
+            daily_documents = self._statistics_daily_documents(
+                connection, context.tenant_id, start, end
+            )
+            top_customers = self._statistics_top_partners(
+                connection, context.tenant_id, start, end, "customer"
+            )
+            top_suppliers = self._statistics_top_partners(
+                connection, context.tenant_id, start, end, "supplier"
+            )
 
         purchase_amount = round(float(overview["purchase_amount"] or 0), 2)
         sale_amount = round(float(overview["sale_amount"] or 0), 2)
@@ -67,6 +76,7 @@ class StatisticsServiceMixin:
             "monthly": self._merge_monthly_statistics(
                 monthly_documents, monthly_movements, start, end
             ),
+            "daily": self._merge_daily_statistics(daily_documents, start, end),
             "mix": [
                 {
                     "type": "sale",
@@ -91,6 +101,8 @@ class StatisticsServiceMixin:
                 },
             ],
             "top_products": [self._serialize_top_product(row) for row in top_products],
+            "top_customers": [self._serialize_top_partner(row) for row in top_customers],
+            "top_suppliers": [self._serialize_top_partner(row) for row in top_suppliers],
         }
 
     def _resolve_statistics_range(
@@ -432,3 +444,98 @@ class StatisticsServiceMixin:
         year = absolute_month // 12
         month = absolute_month % 12 + 1
         return date(year, month, 1)
+
+    def _statistics_daily_documents(
+        self,
+        connection: sqlite3.Connection,
+        tenant_id: int,
+        start: date,
+        end: date,
+    ) -> list[sqlite3.Row]:
+        return connection.execute(
+            """
+            SELECT
+                DATE(d.created_at) AS day_key,
+                ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'purchase' THEN d.total_amount ELSE 0 END), 0), 2) AS purchase_amount,
+                ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'sale' THEN d.total_amount ELSE 0 END), 0), 2) AS sale_amount
+            FROM documents d
+            WHERE d.tenant_id = ?
+              AND d.status = 'active'
+              AND DATE(d.created_at) BETWEEN ? AND ?
+            GROUP BY day_key
+            ORDER BY day_key ASC
+            """,
+            (tenant_id, start.isoformat(), end.isoformat()),
+        ).fetchall()
+
+    def _merge_daily_statistics(
+        self,
+        document_rows: list[sqlite3.Row],
+        start: date,
+        end: date,
+    ) -> list[dict[str, Any]]:
+        from datetime import timedelta
+
+        all_days: dict[str, dict[str, Any]] = {}
+        current = start
+        while current <= end:
+            key = current.isoformat()
+            all_days[key] = {
+                "day": key,
+                "purchase_amount": 0.0,
+                "sale_amount": 0.0,
+            }
+            current += timedelta(days=1)
+
+        for row in document_rows:
+            key = row["day_key"]
+            if key in all_days:
+                all_days[key]["purchase_amount"] = round(float(row["purchase_amount"] or 0), 2)
+                all_days[key]["sale_amount"] = round(float(row["sale_amount"] or 0), 2)
+
+        return list(all_days.values())
+
+    def _statistics_top_partners(
+        self,
+        connection: sqlite3.Connection,
+        tenant_id: int,
+        start: date,
+        end: date,
+        partner_type: str,
+    ) -> list[sqlite3.Row]:
+        doc_type = "sale" if partner_type == "customer" else "purchase"
+        return connection.execute(
+            """
+            SELECT
+                p.id,
+                p.name,
+                p.partner_type,
+                COUNT(d.id) AS doc_count,
+                ROUND(COALESCE(SUM(d.total_amount), 0), 2) AS total_amount
+            FROM partners p
+            JOIN documents d
+                ON d.partner_id = p.id
+                AND d.tenant_id = p.tenant_id
+                AND d.doc_type = ?
+                AND d.status = 'active'
+                AND DATE(d.created_at) BETWEEN ? AND ?
+            WHERE p.tenant_id = ?
+              AND p.partner_type = ?
+              AND p.is_deleted = 0
+            GROUP BY p.id
+            HAVING total_amount > 0
+            ORDER BY total_amount DESC
+            LIMIT 8
+            """,
+            (doc_type, start.isoformat(), end.isoformat(), tenant_id, partner_type),
+        ).fetchall()
+
+    def _serialize_top_partner(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "partner_type": row["partner_type"],
+            "doc_count": int(row["doc_count"] or 0),
+            "total_amount": round(float(row["total_amount"] or 0), 2),
+        }
+

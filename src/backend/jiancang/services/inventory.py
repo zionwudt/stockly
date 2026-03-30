@@ -210,6 +210,7 @@ class InventoryQueryServiceMixin:
             counts = self._summary_counts(connection, context.tenant_id)
             stock_rows = self._summary_stock_rows(connection, context.tenant_id)
             recent_docs = self._recent_documents(connection, context.tenant_id)
+            period_amounts = self._summary_period_amounts(connection, context.tenant_id)
 
         stock_value, alert_items = self._summary_alerts(stock_rows)
         return {
@@ -221,6 +222,10 @@ class InventoryQueryServiceMixin:
                 "sale_count": counts["sale_count"],
                 "stock_value": round(stock_value, 2),
                 "alert_count": len(alert_items),
+                "monthly_sale_amount": round(float(period_amounts["monthly_sale_amount"] or 0), 2),
+                "monthly_purchase_amount": round(float(period_amounts["monthly_purchase_amount"] or 0), 2),
+                "yearly_sale_amount": round(float(period_amounts["yearly_sale_amount"] or 0), 2),
+                "yearly_purchase_amount": round(float(period_amounts["yearly_purchase_amount"] or 0), 2),
             },
             "alerts": alert_items[:5],
             "recent_documents": [dict(row) for row in recent_docs],
@@ -271,6 +276,48 @@ class InventoryQueryServiceMixin:
                 (SELECT COUNT(*) FROM documents WHERE tenant_id = ? AND doc_type = 'sale' AND status = 'active') AS sale_count
             """,
             (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id),
+        ).fetchone()
+
+    def _summary_period_amounts(
+        self, connection: sqlite3.Connection, tenant_id: int
+    ) -> sqlite3.Row:
+        return connection.execute(
+            """
+            SELECT
+                (
+                    SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
+                    FROM documents
+                    WHERE tenant_id = ?
+                      AND doc_type = 'sale'
+                      AND status = 'active'
+                      AND STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now')
+                ) AS monthly_sale_amount,
+                (
+                    SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
+                    FROM documents
+                    WHERE tenant_id = ?
+                      AND doc_type = 'purchase'
+                      AND status = 'active'
+                      AND STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now')
+                ) AS monthly_purchase_amount,
+                (
+                    SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
+                    FROM documents
+                    WHERE tenant_id = ?
+                      AND doc_type = 'sale'
+                      AND status = 'active'
+                      AND STRFTIME('%Y', created_at) = STRFTIME('%Y', 'now')
+                ) AS yearly_sale_amount,
+                (
+                    SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
+                    FROM documents
+                    WHERE tenant_id = ?
+                      AND doc_type = 'purchase'
+                      AND status = 'active'
+                      AND STRFTIME('%Y', created_at) = STRFTIME('%Y', 'now')
+                ) AS yearly_purchase_amount
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id),
         ).fetchone()
 
     def _summary_stock_rows(

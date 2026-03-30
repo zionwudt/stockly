@@ -1,73 +1,148 @@
 import { getState } from '../store.js';
 import { api } from '../api.js';
-import { openModal, closeModal, openConfirm } from '../router.js';
-import { escapeHtml, toast, bindSwipeDelete } from '../utils.js';
+import { openModal, closeModal, openConfirm, setHeaderAction } from '../router.js';
+import { escapeHtml, toast } from '../utils.js';
+
+const PAGE_SIZE = 50;
+let visibleCount = PAGE_SIZE;
+let keyword = '';
 
 export function mount(container) {
+  visibleCount = PAGE_SIZE;
+  keyword = '';
+  render(container);
+  bindEvents(container);
+
+  setHeaderAction(
+    `<button class="header-add-btn" id="header-customer-add-btn" aria-label="新增客户">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>`,
+    () => openCustomerModal()
+  );
+}
+
+function render(container) {
   const { customers } = getState();
 
   container.innerHTML = `
     <div class="page-section">
-      <div class="card-list" id="customer-list"></div>
-      <button type="button" class="btn-fab" id="customer-create-btn">+</button>
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="customer-search" type="text" placeholder="搜索客户" value="${escapeHtml(keyword)}">
+      </div>
+    </div>
+    <div class="page-section" style="padding-top:0;">
+      <div id="customer-list"></div>
+      <div id="customer-load-more" class="load-more-hint" style="display:none;">下拉加载更多</div>
     </div>
   `;
 
   renderList(container, customers);
-  bindEvents(container, customers);
+  bindScrollEvents(container);
+}
+
+function getFiltered(customers) {
+  const kw = keyword.trim().toLowerCase();
+  if (!kw) return customers;
+  return customers.filter(c =>
+    String(c.name || '').toLowerCase().includes(kw) ||
+    String(c.contact || '').toLowerCase().includes(kw) ||
+    String(c.phone || '').toLowerCase().includes(kw)
+  );
 }
 
 function renderList(container, customers) {
+  const filtered = getFiltered(customers);
   const el = container.querySelector('#customer-list');
-  if (!customers.length) {
-    el.innerHTML = '<div class="empty-hint">暂无客户，点击右下角新增</div>';
+  const loadMoreEl = container.querySelector('#customer-load-more');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-hint">暂无客户</div>';
+    if (loadMoreEl) loadMoreEl.style.display = 'none';
     return;
   }
 
-  el.innerHTML = customers.map((c) => `
-    <div class="swipe-wrap">
-      <div class="swipe-content">
-        <div class="list-item" data-id="${c.id}">
-          <div class="list-item-main">
-            <div class="list-item-title">${escapeHtml(c.name)}</div>
-            <div class="list-item-desc">
-              ${c.contact ? escapeHtml(c.contact) : ''}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}
-            </div>
-            ${c.note ? `<div class="list-item-note">${escapeHtml(c.note)}</div>` : ''}
-          </div>
-          <div class="list-item-right">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-4)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          </div>
-        </div>
-      </div>
-      <div class="swipe-action" data-delete-id="${c.id}" data-delete-name="${escapeHtml(c.name)}">删除</div>
-    </div>
-  `).join('');
+  const slice = filtered.slice(0, visibleCount);
+  el.innerHTML = slice.map(c => renderCustomerCard(c)).join('');
+  if (loadMoreEl) {
+    loadMoreEl.style.display = filtered.length > visibleCount ? 'block' : 'none';
+  }
 }
 
-function bindEvents(container, customers) {
-  container.querySelector('#customer-create-btn').addEventListener('click', () => {
-    openCustomerModal();
-  });
+function renderCustomerCard(c) {
+  const initials = (c.name || '客')[0];
+  return `
+    <div class="item-card" data-id="${c.id}">
+      <div class="item-card-main">
+        <div class="item-card-header">
+          <div class="item-card-avatar item-card-avatar-orange">${escapeHtml(initials)}</div>
+          <div class="item-card-info">
+            <div class="item-card-title">${escapeHtml(c.name)}</div>
+            ${(c.contact || c.phone) ? `<div class="item-card-meta">${[c.contact, c.phone].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
+          </div>
+        </div>
+        ${c.note ? `<div class="item-card-note">${escapeHtml(c.note)}</div>` : ''}
+      </div>
+      <div class="item-card-footer">
+        <button class="item-action-btn" data-edit-id="${c.id}">编辑</button>
+        <button class="item-action-btn btn-danger" data-delete-id="${c.id}" data-delete-name="${escapeHtml(c.name)}">删除</button>
+      </div>
+    </div>
+  `;
+}
 
-  container.querySelector('#customer-list').addEventListener('click', (e) => {
-    if (e.target.closest('.swipe-action')) return;
-    const item = e.target.closest('.list-item');
-    if (!item) return;
-    const customer = customers.find(c => String(c.id) === item.dataset.id);
-    if (customer) openCustomerModal(customer);
-  });
-
-  bindSwipeDelete(container.querySelector('#customer-list'), (id, name) => {
-    openConfirm('删除客户', `确定要删除客户"${name}"吗？`, async () => {
-      try {
-        await api.deleteCustomer(Number(id));
-        await window.__app.refreshData('客户已删除');
-      } catch (err) {
-        toast(err.message || '删除失败', 'error');
-      }
+function bindEvents(container) {
+  const searchInput = container.querySelector('#customer-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      keyword = searchInput.value || '';
+      visibleCount = PAGE_SIZE;
+      renderList(container, getState().customers);
     });
+  }
+
+  const customerList = container.querySelector('#customer-list');
+  if (!customerList) return;
+
+  customerList.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.item-action-btn[data-edit-id]');
+    if (editBtn) {
+      const customer = getState().customers.find(c => String(c.id) === editBtn.dataset.editId);
+      if (customer) openCustomerModal(customer);
+      return;
+    }
+
+    const deleteBtn = e.target.closest('.item-action-btn[data-delete-id]');
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.deleteId;
+      const name = deleteBtn.dataset.deleteName || '';
+      openConfirm('删除客户', `确定要删除客户"${name}"吗？`, async () => {
+        try {
+          await api.deleteCustomer(Number(id));
+          await window.__app.refreshData('客户已删除');
+        } catch (err) {
+          toast(err.message || '删除失败', 'error');
+        }
+      });
+    }
   });
+}
+
+function bindScrollEvents(container) {
+  const scroller = document.querySelector('.app-content') || window;
+  const loadMoreEl = container.querySelector('#customer-load-more');
+  const onScroll = () => {
+    const scrollEl = scroller === window ? document.documentElement : scroller;
+    const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+    if (distFromBottom < 120 && loadMoreEl && loadMoreEl.style.display !== 'none') {
+      visibleCount += PAGE_SIZE;
+      renderList(container, getState().customers);
+    }
+  };
+  scroller.addEventListener('scroll', onScroll, { passive: true });
+  container._customerScrollCleanup = () => scroller.removeEventListener('scroll', onScroll);
 }
 
 function openCustomerModal(customer = null) {
@@ -114,5 +189,11 @@ function openCustomerModal(customer = null) {
   });
 }
 
-export function unmount() {}
+export function unmount() {
+  const container = document.getElementById('page');
+  if (container && container._customerScrollCleanup) {
+    container._customerScrollCleanup();
+    delete container._customerScrollCleanup;
+  }
+}
 
