@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { openModal, closeModal } from '../router.js';
 import { escapeHtml, toast } from '../utils.js';
 
-export function openAdjustmentModal() {
+export function openAdjustmentModal(preselectedProductId) {
   const { products } = getState();
 
   const body = `
@@ -12,7 +12,7 @@ export function openAdjustmentModal() {
         <label>商品</label>
         <select name="product_id" class="form-input" required>
           <option value="">请选择商品</option>
-          ${products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (库存: ${p.on_hand || 0})</option>`).join('')}
+          ${products.map(p => `<option value="${p.id}" ${p.id === preselectedProductId ? 'selected' : ''}>${escapeHtml(p.name)} (库存: ${p.on_hand || 0})</option>`).join('')}
         </select>
       </div>
       <div class="form-field">

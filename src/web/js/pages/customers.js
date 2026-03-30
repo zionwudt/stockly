@@ -1,7 +1,7 @@
 import { getState } from '../store.js';
 import { api } from '../api.js';
 import { openModal, closeModal, openConfirm } from '../router.js';
-import { escapeHtml, toast } from '../utils.js';
+import { escapeHtml, toast, bindSwipeDelete } from '../utils.js';
 
 export function mount(container) {
   const { customers } = getState();
@@ -14,17 +14,7 @@ export function mount(container) {
   `;
 
   renderList(container, customers);
-
-  container.querySelector('#customer-create-btn').addEventListener('click', () => {
-    openCustomerModal();
-  });
-
-  container.querySelector('#customer-list').addEventListener('click', (e) => {
-    const item = e.target.closest('.list-item');
-    if (!item) return;
-    const customer = customers.find(c => String(c.id) === item.dataset.id);
-    if (customer) openCustomerModal(customer);
-  });
+  bindEvents(container, customers);
 }
 
 function renderList(container, customers) {
@@ -34,20 +24,50 @@ function renderList(container, customers) {
     return;
   }
 
-  el.innerHTML = customers.map((customer) => `
-    <div class="list-item" data-id="${customer.id}">
-      <div class="list-item-main">
-        <div class="list-item-title">${escapeHtml(customer.name)}</div>
-        <div class="list-item-desc">
-          ${customer.contact ? escapeHtml(customer.contact) : ''}${customer.phone ? ' · ' + escapeHtml(customer.phone) : ''}
+  el.innerHTML = customers.map((c) => `
+    <div class="swipe-wrap">
+      <div class="swipe-content">
+        <div class="list-item" data-id="${c.id}">
+          <div class="list-item-main">
+            <div class="list-item-title">${escapeHtml(c.name)}</div>
+            <div class="list-item-desc">
+              ${c.contact ? escapeHtml(c.contact) : ''}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}
+            </div>
+            ${c.note ? `<div class="list-item-note">${escapeHtml(c.note)}</div>` : ''}
+          </div>
+          <div class="list-item-right">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-4)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
         </div>
-        ${customer.note ? `<div class="list-item-note">${escapeHtml(customer.note)}</div>` : ''}
       </div>
-      <div class="list-item-right">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-4)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
+      <div class="swipe-action" data-delete-id="${c.id}" data-delete-name="${escapeHtml(c.name)}">删除</div>
     </div>
   `).join('');
+}
+
+function bindEvents(container, customers) {
+  container.querySelector('#customer-create-btn').addEventListener('click', () => {
+    openCustomerModal();
+  });
+
+  container.querySelector('#customer-list').addEventListener('click', (e) => {
+    if (e.target.closest('.swipe-action')) return;
+    const item = e.target.closest('.list-item');
+    if (!item) return;
+    const customer = customers.find(c => String(c.id) === item.dataset.id);
+    if (customer) openCustomerModal(customer);
+  });
+
+  bindSwipeDelete(container.querySelector('#customer-list'), (id, name) => {
+    openConfirm('删除客户', `确定要删除客户"${name}"吗？`, async () => {
+      try {
+        await api.deleteCustomer(Number(id));
+        await window.__app.refreshData('客户已删除');
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
+  });
 }
 
 function openCustomerModal(customer = null) {
@@ -73,7 +93,6 @@ function openCustomerModal(customer = null) {
         <label>备注</label>
         <input name="note" class="form-input" type="text" placeholder="渠道、结算方式" value="${escapeHtml(c.note || '')}">
       </div>
-      ${isEdit ? '<button type="button" class="btn btn-danger btn-block btn-sm" id="modal-delete-customer" style="margin-top:8px">删除客户</button>' : ''}
     </form>
   `;
 
@@ -93,22 +112,6 @@ function openCustomerModal(customer = null) {
       toast(err.message || '操作失败', 'error');
     }
   });
-
-  if (isEdit) {
-    requestAnimationFrame(() => {
-      document.getElementById('modal-delete-customer')?.addEventListener('click', () => {
-        closeModal();
-        openConfirm('删除客户', `确定要删除客户"${customer.name}"吗？`, async () => {
-          try {
-            await api.deleteCustomer(customer.id);
-            await window.__app.refreshData('客户已删除');
-          } catch (err) {
-            toast(err.message || '删除失败', 'error');
-          }
-        });
-      });
-    });
-  }
 }
 
 export function unmount() {}

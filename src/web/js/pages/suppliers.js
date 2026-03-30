@@ -1,7 +1,7 @@
 import { getState } from '../store.js';
 import { api } from '../api.js';
 import { openModal, closeModal, openConfirm } from '../router.js';
-import { escapeHtml, toast } from '../utils.js';
+import { escapeHtml, toast, bindSwipeDelete } from '../utils.js';
 
 export function mount(container) {
   const { suppliers } = getState();
@@ -14,17 +14,7 @@ export function mount(container) {
   `;
 
   renderList(container, suppliers);
-
-  container.querySelector('#add-supplier-btn').addEventListener('click', () => {
-    openSupplierModal();
-  });
-
-  container.querySelector('#supplier-list').addEventListener('click', (e) => {
-    const item = e.target.closest('.list-item');
-    if (!item) return;
-    const supplier = suppliers.find(s => String(s.id) === item.dataset.id);
-    if (supplier) openSupplierModal(supplier);
-  });
+  bindEvents(container, suppliers);
 }
 
 function renderList(container, suppliers) {
@@ -35,19 +25,49 @@ function renderList(container, suppliers) {
   }
 
   el.innerHTML = suppliers.map(s => `
-    <div class="list-item" data-id="${s.id}">
-      <div class="list-item-main">
-        <div class="list-item-title">${escapeHtml(s.name)}</div>
-        <div class="list-item-desc">
-          ${s.contact ? escapeHtml(s.contact) : ''}${s.phone ? ' · ' + escapeHtml(s.phone) : ''}
+    <div class="swipe-wrap">
+      <div class="swipe-content">
+        <div class="list-item" data-id="${s.id}">
+          <div class="list-item-main">
+            <div class="list-item-title">${escapeHtml(s.name)}</div>
+            <div class="list-item-desc">
+              ${s.contact ? escapeHtml(s.contact) : ''}${s.phone ? ' · ' + escapeHtml(s.phone) : ''}
+            </div>
+            ${s.note ? `<div class="list-item-note">${escapeHtml(s.note)}</div>` : ''}
+          </div>
+          <div class="list-item-right">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-4)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
         </div>
-        ${s.note ? `<div class="list-item-note">${escapeHtml(s.note)}</div>` : ''}
       </div>
-      <div class="list-item-right">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-4)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
+      <div class="swipe-action" data-delete-id="${s.id}" data-delete-name="${escapeHtml(s.name)}">删除</div>
     </div>
   `).join('');
+}
+
+function bindEvents(container, suppliers) {
+  container.querySelector('#add-supplier-btn').addEventListener('click', () => {
+    openSupplierModal();
+  });
+
+  container.querySelector('#supplier-list').addEventListener('click', (e) => {
+    if (e.target.closest('.swipe-action')) return;
+    const item = e.target.closest('.list-item');
+    if (!item) return;
+    const supplier = suppliers.find(s => String(s.id) === item.dataset.id);
+    if (supplier) openSupplierModal(supplier);
+  });
+
+  bindSwipeDelete(container.querySelector('#supplier-list'), (id, name) => {
+    openConfirm('删除供应商', `确定要删除供应商"${name}"吗？`, async () => {
+      try {
+        await api.deleteSupplier(Number(id));
+        await window.__app.refreshData('供应商已删除');
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
+  });
 }
 
 function openSupplierModal(supplier = null) {
@@ -73,7 +93,6 @@ function openSupplierModal(supplier = null) {
         <label>备注</label>
         <input name="note" class="form-input" type="text" placeholder="账期、供货特点" value="${escapeHtml(s.note || '')}">
       </div>
-      ${isEdit ? '<button type="button" class="btn btn-danger btn-block btn-sm" id="modal-delete-supplier" style="margin-top:8px">删除供应商</button>' : ''}
     </form>
   `;
 
@@ -93,22 +112,6 @@ function openSupplierModal(supplier = null) {
       toast(err.message || '操作失败', 'error');
     }
   });
-
-  if (isEdit) {
-    requestAnimationFrame(() => {
-      document.getElementById('modal-delete-supplier')?.addEventListener('click', () => {
-        closeModal();
-        openConfirm('删除供应商', `确定要删除供应商"${supplier.name}"吗？`, async () => {
-          try {
-            await api.deleteSupplier(supplier.id);
-            await window.__app.refreshData('供应商已删除');
-          } catch (err) {
-            toast(err.message || '删除失败', 'error');
-          }
-        });
-      });
-    });
-  }
 }
 
 export function unmount() {}

@@ -344,8 +344,8 @@ function handleRoute() {
   headerMenuBtn.hidden = isSubPage;
   headerBackBtn.hidden = !isSubPage;
 
-  // 二级页面隐藏右侧租户切换，减少干扰
-  if (headerTenant) headerTenant.hidden = isSubPage || !headerTenant.textContent;
+  // 右上角始终显示租户名
+  if (headerTenant) headerTenant.hidden = !headerTenant.textContent;
 
   renderDrawer();
 }

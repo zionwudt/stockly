@@ -208,25 +208,24 @@ img { max-width: 100%; display: block; }
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  width: 44px;
   justify-content: flex-end;
 }
 
 .header-tenant-btn {
-  max-width: 90px;
+  max-width: 120px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-2);
-  padding: 4px 8px;
-  border-radius: var(--r-sm);
-  background: var(--bg);
+  color: var(--primary);
+  padding: 4px 10px;
+  border-radius: var(--r-xl);
+  background: var(--primary-light);
   transition: background var(--t);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
 }
-.header-tenant-btn:active { background: var(--border); }
+.header-tenant-btn:active { background: #cce5ff; }
 
 /* Main Content */
 .app-content {
@@ -1111,6 +1110,40 @@ textarea.form-input {
   .overlay-dialog.show { transform: translate(-50%, -50%) scale(1); }
   .overlay-content { border-radius: var(--r-lg); padding: 24px; }
 }
+
+/* ============================================================
+   Swipe-to-delete list item
+   ============================================================ */
+.swipe-wrap {
+  position: relative;
+  overflow: hidden;
+}
+.swipe-wrap + .swipe-wrap { border-top: 1px solid var(--divider); }
+.swipe-wrap:last-child .list-item { border-bottom: none; }
+
+.swipe-content {
+  position: relative;
+  z-index: 1;
+  background: var(--card);
+  transition: transform .25s ease;
+}
+.swipe-content.swiping { transition: none; }
+
+.swipe-action {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 0;
+  cursor: pointer;
+}
+
 
 /* Stats loading placeholder */
 .stats-loading { color: var(--text-3); font-size: 13px; padding: 24px 0; text-align: center; }

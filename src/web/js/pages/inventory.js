@@ -1,5 +1,6 @@
 import { getState, loadStock, loadMovements } from '../store.js';
 import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeTag, escapeHtml } from '../utils.js';
+import { openAdjustmentModal } from './adjustment.js';
 
 let searchQuery = '';
 let filter = 'all';
@@ -73,9 +74,12 @@ function renderStockList(container, stock) {
         </div>
         <div class="list-item-desc">${escapeHtml(s.sku)}${s.category ? ' · ' + escapeHtml(s.category) : ''}</div>
       </div>
-      <div class="list-item-right">
-        <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
-        <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
+      <div class="list-item-right" style="display:flex;align-items:center;gap:10px">
+        <div>
+          <div class="font-num ${s.in_alert ? 'text-danger' : ''}">${formatQuantity(s.on_hand)} ${escapeHtml(s.unit || '')}</div>
+          <div class="list-item-sub">${formatCurrency(s.inventory_value)}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" data-adjust-id="${s.id}" data-adjust-name="${escapeHtml(s.name)}" style="padding:0 8px;height:28px;font-size:11px">调整</button>
       </div>
     </div>
   `).join('');
@@ -117,6 +121,16 @@ function bindEvents(container) {
       renderStockList(container, getState().stock);
     });
   });
+
+  // Adjust stock button — delegate on stock-list
+  container.querySelector('#stock-list').addEventListener('click', (e) => {
+    const adjustBtn = e.target.closest('[data-adjust-id]');
+    if (!adjustBtn) return;
+    e.stopPropagation();
+    const productId = Number(adjustBtn.dataset.adjustId);
+    openAdjustmentModal(productId);
+  });
 }
 
 export function unmount() {}
+

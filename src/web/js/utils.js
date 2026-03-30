@@ -78,3 +78,75 @@ export function toast(msg, type = 'info') {
     container.className = 'toast-container';
   }, 2500);
 }
+
+/**
+ * Bind swipe-to-delete on a card-list container.
+ * Each .swipe-wrap > .swipe-content can be swiped left to reveal .swipe-action.
+ */
+export function bindSwipeDelete(listEl, onDelete) {
+  let startX = 0, currentX = 0, swiping = false, activeEl = null;
+  const THRESHOLD = 60;
+
+  function resetAll() {
+    listEl.querySelectorAll('.swipe-content').forEach(el => {
+      el.style.transform = '';
+      el.classList.remove('swiping');
+    });
+    activeEl = null;
+  }
+
+  listEl.addEventListener('touchstart', (e) => {
+    // close any open swipe first
+    if (activeEl && !activeEl.contains(e.target)) {
+      resetAll();
+    }
+    const wrap = e.target.closest('.swipe-wrap');
+    if (!wrap) return;
+    const content = wrap.querySelector('.swipe-content');
+    if (!content) return;
+    startX = e.touches[0].clientX;
+    currentX = startX;
+    swiping = true;
+    activeEl = content;
+    content.classList.add('swiping');
+  }, { passive: true });
+
+  listEl.addEventListener('touchmove', (e) => {
+    if (!swiping || !activeEl) return;
+    currentX = e.touches[0].clientX;
+    let dx = currentX - startX;
+    if (dx > 0) dx = 0; // only left
+    if (dx < -72) dx = -72;
+    activeEl.style.transform = `translateX(${dx}px)`;
+  }, { passive: true });
+
+  listEl.addEventListener('touchend', () => {
+    if (!swiping || !activeEl) return;
+    swiping = false;
+    activeEl.classList.remove('swiping');
+    const dx = currentX - startX;
+    if (dx < -THRESHOLD) {
+      activeEl.style.transform = 'translateX(-72px)';
+    } else {
+      activeEl.style.transform = '';
+      activeEl = null;
+    }
+  });
+
+  // handle delete button click
+  listEl.addEventListener('click', (e) => {
+    const delBtn = e.target.closest('.swipe-action');
+    if (!delBtn) return;
+    e.stopPropagation();
+    const id = delBtn.dataset.deleteId;
+    const name = delBtn.dataset.deleteName || '';
+    if (id && onDelete) onDelete(id, name);
+  });
+
+  // clicking on content area closes open swipe
+  listEl.addEventListener('click', (e) => {
+    if (e.target.closest('.swipe-action')) return;
+    resetAll();
+  });
+}
+
