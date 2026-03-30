@@ -30,6 +30,7 @@ export const api = {
   logout: () => post('/api/auth/logout', {}),
   me: () => get('/api/auth/me'),
   updateProfile: (d) => put('/api/auth/profile', d),
+  changePassword: (d) => put('/api/auth/profile', d),
   switchTenant: (d) => post('/api/auth/switch-tenant', d),
 
   // Tenant hub

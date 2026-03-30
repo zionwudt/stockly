@@ -189,6 +189,71 @@ class AuthServiceMixin:
             tenant_role=str(tenant_row["tenant_role"]),
         )
 
+    def update_profile(self, principal: SessionPrincipal, payload: dict[str, Any]) -> SessionPrincipal:
+        display_name = (payload.get("display_name") or "").strip()
+        avatar_data: str | None = payload.get("avatar_data")
+        # Password change fields
+        current_password = self._text(payload, "current_password")
+        new_password = self._text(payload, "password")
+        password_confirm = self._text(payload, "password_confirm")
+
+        if avatar_data is not None and not isinstance(avatar_data, str):
+            raise ValidationError("头像数据格式不正确。")
+        if avatar_data and not avatar_data.startswith("data:image/"):
+            raise ValidationError("头像数据格式不正确，请上传图片文件。")
+        if avatar_data and len(avatar_data) > 7_340_032:  # ~5 MB base64
+            raise ValidationError("头像文件过大，请选择小于 512 KB 的图片。")
+
+        # If no display/avatar/password updates provided, nothing to do
+        if not display_name and avatar_data is None and not new_password:
+            raise ValidationError("没有可更新的内容。")
+
+        with get_connection(self.db_path) as connection:
+            if display_name:
+                connection.execute(
+                    "UPDATE users SET display_name = ? WHERE id = ?",
+                    (display_name, principal.user_id),
+                )
+            if avatar_data is not None:
+                connection.execute(
+                    "UPDATE users SET avatar_data = ? WHERE id = ?",
+                    (avatar_data, principal.user_id),
+                )
+            # Handle password change: verify current password, validate new password, update salt/hash
+            if new_password:
+                # Require current password
+                if not current_password:
+                    raise ValidationError("需要提供当前密码以修改密码。")
+                # Verify current password matches stored
+                row = connection.execute(
+                    "SELECT password_salt, password_hash FROM users WHERE id = ? LIMIT 1",
+                    (principal.user_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValidationError("用户不存在。")
+                if not verify_password(current_password, row["password_salt"], row["password_hash"]):
+                    raise ValidationError("当前密码不正确。")
+                # Validate new password
+                self._validate_password(new_password)
+                if password_confirm and password_confirm != new_password:
+                    raise ValidationError("两次输入的密码不一致。")
+                salt = generate_salt()
+                connection.execute(
+                    "UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?",
+                    (salt, hash_password(new_password, salt), principal.user_id),
+                )
+            connection.commit()
+
+        return SessionPrincipal(
+            user_id=principal.user_id,
+            username=principal.username,
+            display_name=display_name or principal.display_name,
+            tenant_id=principal.tenant_id,
+            tenant_name=principal.tenant_name,
+            tenant_slug=principal.tenant_slug,
+            tenant_role=principal.tenant_role,
+        )
+
     def get_auth_profile(self, identity: SessionPrincipal | RequestContext) -> dict[str, Any]:
         current_tenant_id = getattr(identity, "tenant_id", None)
 
@@ -216,12 +281,18 @@ class AuthServiceMixin:
                 """,
                 (identity.user_id,),
             ).fetchone()[0]
+            avatar_row = connection.execute(
+                "SELECT avatar_data FROM users WHERE id = ? LIMIT 1",
+                (identity.user_id,),
+            ).fetchone()
+            avatar_data = avatar_row["avatar_data"] if avatar_row else None
 
         return {
             "user": {
                 "id": identity.user_id,
                 "username": identity.username,
                 "display_name": identity.display_name,
+                "avatar_data": avatar_data,
             },
             "tenant": current_tenant,
             "current_tenant": current_tenant,
