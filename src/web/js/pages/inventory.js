@@ -3,10 +3,14 @@ import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeLab
 import { openModal, closeModal } from '../router.js';
 import { openAdjustmentModal } from './adjustment.js';
 
+const PAGE_SIZE = 30;
+
 let searchQuery = '';
 let filter = 'all';
+let visibleCount = PAGE_SIZE;
 
 export function mount(container) {
+  visibleCount = PAGE_SIZE;
   const { stock } = getState();
 
   container.innerHTML = `
@@ -25,9 +29,10 @@ export function mount(container) {
     <div class="page-section">
       <div class="section-header">
         <h3>库存列表</h3>
-        <span class="section-hint">${stock.length} 项</span>
+        <span class="section-hint" id="stock-count-hint">${stock.length} 项</span>
       </div>
       <div class="card-list" id="stock-list"></div>
+      <div id="stock-load-more" class="load-more-hint" style="display:none;">上拉加载更多</div>
     </div>
   `;
 
@@ -52,12 +57,18 @@ function renderStockList(container, stock) {
   }
 
   const el = container.querySelector('#stock-list');
+  const loadMoreEl = container.querySelector('#stock-load-more');
+  const hintEl = container.querySelector('#stock-count-hint');
+  if (hintEl) hintEl.textContent = `${filtered.length} 项`;
+
   if (!filtered.length) {
     el.innerHTML = '<div class="empty-hint">暂无数据</div>';
+    if (loadMoreEl) loadMoreEl.style.display = 'none';
     return;
   }
 
-  el.innerHTML = filtered.map(s => `
+  const slice = filtered.slice(0, visibleCount);
+  el.innerHTML = slice.map(s => `
     <div class="list-item" data-stock-id="${s.id}">
       <div class="list-item-body">
         <div class="list-item-main">
@@ -78,6 +89,10 @@ function renderStockList(container, stock) {
       </div>
     </div>
   `).join('');
+
+  if (loadMoreEl) {
+    loadMoreEl.style.display = filtered.length > visibleCount ? 'block' : 'none';
+  }
 }
 
 function bindEvents(container) {
@@ -85,6 +100,7 @@ function bindEvents(container) {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       searchQuery = e.target.value.trim();
+      visibleCount = PAGE_SIZE;
       renderStockList(container, getState().stock);
     });
   }
@@ -92,10 +108,25 @@ function bindEvents(container) {
   container.querySelectorAll('[data-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       filter = btn.dataset.filter;
+      visibleCount = PAGE_SIZE;
       container.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
       renderStockList(container, getState().stock);
     });
   });
+
+  // Infinite scroll
+  const loadMoreEl = container.querySelector('#stock-load-more');
+  const scroller = document.querySelector('.app-content') || window;
+  const onScroll = () => {
+    const scrollEl = scroller === window ? document.documentElement : scroller;
+    const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+    if (distFromBottom < 120 && loadMoreEl && loadMoreEl.style.display !== 'none') {
+      visibleCount += PAGE_SIZE;
+      renderStockList(container, getState().stock);
+    }
+  };
+  scroller.addEventListener('scroll', onScroll, { passive: true });
+  container._stockScrollCleanup = () => scroller.removeEventListener('scroll', onScroll);
 
   const stockList = container.querySelector('#stock-list');
   if (!stockList) return;
@@ -140,13 +171,6 @@ function openStockMovementModal(stockItem) {
         <div class="detail-doc-no">${escapeHtml(stockItem.name)}</div>
         <span class="detail-status ${stockItem.in_alert ? 'is-void' : 'is-active'}">库存 ${formatQuantity(stockItem.on_hand)}</span>
       </div>
-      <div class="detail-grid">
-        ${detailRow('SKU', escapeHtml(stockItem.sku || '-'))}
-        ${detailRow('分类', escapeHtml(stockItem.category || '未分类'))}
-        ${detailRow('单位', escapeHtml(stockItem.unit || '-'))}
-        ${detailRow('库存金额', `<span class="font-num">${formatCurrency(stockItem.inventory_value || 0)}</span>`)}
-      </div>
-      <div class="detail-section-title">最近流水</div>
       <div class="card-list detail-list">${movementRows}</div>
     </div>
   `;
@@ -165,13 +189,10 @@ function movementTag(type) {
   return `<span class="tag ${cls}">${escapeHtml(typeLabel(normalized))}</span>`;
 }
 
-function detailRow(label, value) {
-  return `
-    <div class="detail-row">
-      <span class="detail-label">${label}</span>
-      <span class="detail-value">${value}</span>
-    </div>
-  `;
+export function unmount() {
+  const container = document.getElementById('page');
+  if (container && container._stockScrollCleanup) {
+    container._stockScrollCleanup();
+    delete container._stockScrollCleanup;
+  }
 }
-
-export function unmount() {}

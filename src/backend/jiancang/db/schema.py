@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS tenant_memberships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('owner', 'member')),
+    role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'member')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tenant_id, user_id),
     FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -113,6 +113,7 @@ SCHEMA_STATEMENTS = [
         doc_no TEXT NOT NULL,
         doc_type TEXT NOT NULL CHECK(doc_type IN ('purchase', 'sale', 'adjustment')),
         partner_id INTEGER,
+        created_by INTEGER,
         note TEXT NOT NULL DEFAULT '',
         total_amount REAL NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'active',
@@ -120,7 +121,8 @@ SCHEMA_STATEMENTS = [
         void_reason TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id),
-        FOREIGN KEY(partner_id) REFERENCES partners(id)
+        FOREIGN KEY(partner_id) REFERENCES partners(id),
+        FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
     )
     """,
     """
@@ -153,6 +155,20 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE SET NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS document_audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER NOT NULL,
+        document_id INTEGER NOT NULL,
+        action TEXT NOT NULL CHECK(action IN ('void', 'restore')),
+        user_id INTEGER,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+        FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
@@ -175,6 +191,7 @@ SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_partners_tenant_deleted_type ON partners(tenant_id, is_deleted, partner_type)",
     "CREATE INDEX IF NOT EXISTS idx_document_items_tenant_document ON document_items(tenant_id, document_id)",
     "CREATE INDEX IF NOT EXISTS idx_stock_movements_tenant_product ON stock_movements(tenant_id, product_id)",
+    "CREATE INDEX IF NOT EXISTS idx_document_audit_logs_tenant_doc ON document_audit_logs(tenant_id, document_id)",
 ]
 
 INDEX_STATEMENTS = [

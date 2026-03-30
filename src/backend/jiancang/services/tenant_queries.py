@@ -89,7 +89,7 @@ class TenantQueryMixin:
             FROM tenant_memberships tm
             JOIN tenants t ON t.id = tm.tenant_id
             WHERE tm.user_id = ? AND t.status = 'active'
-            ORDER BY CASE WHEN tm.role = 'owner' THEN 0 ELSE 1 END, t.created_at DESC, t.id DESC
+            ORDER BY CASE WHEN tm.role = 'owner' THEN 0 WHEN tm.role = 'admin' THEN 1 ELSE 2 END, t.created_at DESC, t.id DESC
             """,
             (user_id,),
         ).fetchall()
@@ -100,6 +100,7 @@ class TenantQueryMixin:
                 "slug": str(row["slug"]),
                 "role": str(row["role"]),
                 "is_owner": str(row["role"]) == "owner",
+                "is_admin": str(row["role"]) == "admin",
                 "joined_at": str(row["joined_at"]),
                 "member_count": int(row["member_count"]),
                 "pending_request_count": int(row["pending_request_count"]),
@@ -176,7 +177,7 @@ class TenantQueryMixin:
     def _list_pending_approvals(
         self,
         connection: sqlite3.Connection,
-        owner_user_id: int,
+        user_id: int,
         current_tenant_id: int | None,
     ) -> list[dict[str, Any]]:
         rows = connection.execute(
@@ -194,10 +195,11 @@ class TenantQueryMixin:
             FROM tenant_join_requests r
             JOIN tenants t ON t.id = r.tenant_id
             JOIN users u ON u.id = r.user_id
-            WHERE r.status = 'pending' AND t.owner_user_id = ?
+            JOIN tenant_memberships tm ON tm.tenant_id = t.id AND tm.user_id = ?
+            WHERE r.status = 'pending' AND tm.role IN ('owner', 'admin')
             ORDER BY CASE WHEN t.id = ? THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC
             """,
-            (owner_user_id, current_tenant_id or -1),
+            (user_id, current_tenant_id or -1),
         ).fetchall()
         return [dict(row) for row in rows]
 

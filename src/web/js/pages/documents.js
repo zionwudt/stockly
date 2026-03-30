@@ -5,7 +5,7 @@ import { openConfirm, openModal, closeModal, setHeaderAction } from '../router.j
 import { openPurchaseModal } from './purchase.js';
 import { openSaleModal } from './sale.js';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 30;
 
 let docFilter = 'all';
 let docItemKeyword = '';
@@ -56,7 +56,7 @@ function render(container) {
     </div>
     <div class="page-section" style="padding-top:0;">
       <div id="doc-list"></div>
-      <div id="doc-load-more" class="load-more-hint" style="display:none;">下拉加载更多</div>
+      <div id="doc-load-more" class="load-more-hint" style="display:none;">上拉加载更多</div>
     </div>
   `;
 
@@ -105,7 +105,7 @@ function renderDocCard(d) {
   const isVoided = d.status === 'void';
   const actionLabel = isVoided ? '恢复' : '作废';
   const actionType = isVoided ? 'restore' : 'void';
-  const actionClass = isVoided ? 'btn-success' : 'btn-warning';
+  const actionClass = isVoided ? 'btn-accent' : 'btn-warning';
 
   return `
     <div class="doc-card ${isVoided ? 'doc-card-voided' : ''}" data-doc-id="${d.id}">
@@ -121,9 +121,10 @@ function renderDocCard(d) {
         <div class="doc-card-amount font-num">${formatCurrency(d.total_amount)}</div>
       </div>
       ${renderItemSummary(d.items)}
+      ${renderCardAuditLogs(d.audit_logs)}
       ${d.note ? `<div class="doc-card-note">${escapeHtml(d.note)}</div>` : ''}
       <div class="doc-card-foot">
-        <span class="doc-card-time">${formatDateTime(d.created_at)}</span>
+        <span class="doc-card-time">${formatDateTime(d.created_at)}${d.created_by_name ? ` · ${escapeHtml(d.created_by_name)}` : ''}</span>
         <button class="item-action-btn ${actionClass}" data-doc-id="${d.id}" data-doc-action="${actionType}">
           ${actionLabel}
         </button>
@@ -137,10 +138,29 @@ function renderItemSummary(items) {
   if (!safeItems.length) return '<div class="doc-card-items-empty">暂无明细</div>';
   return `
     <div class="doc-card-items">
-      ${safeItems.map(item => `
+      ${safeItems.map(item => {
+        const lineAmount = item.line_amount != null ? item.line_amount : (item.quantity || 0) * (item.unit_price || 0);
+        return `
         <div class="doc-card-item-row">
           <span class="doc-card-item-name">${escapeHtml(item.product_name || '未命名商品')}</span>
-          <span class="doc-card-item-meta">${formatQuantity(item.quantity || 0)} × ${formatCurrency(item.unit_price || 0)}</span>
+          <span class="doc-card-item-meta">${formatQuantity(item.quantity || 0)} × ${formatCurrency(item.unit_price || 0)} = ${formatCurrency(lineAmount)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderCardAuditLogs(logs) {
+  const safeLogs = Array.isArray(logs) ? logs : [];
+  if (!safeLogs.length) return '';
+  const actionLabel = { void: '作废', restore: '恢复' };
+  return `
+    <div class="doc-card-audit">
+      ${safeLogs.map(log => `
+        <div class="doc-card-audit-row">
+          <span class="doc-card-audit-tag ${log.action === 'void' ? 'is-void' : 'is-restore'}">${actionLabel[log.action] || log.action}</span>
+          <span class="doc-card-audit-text">${escapeHtml(log.operator_name || '未知')}${log.reason ? ' · ' + escapeHtml(log.reason) : ''}</span>
+          <span class="doc-card-audit-time">${formatDateTime(log.created_at)}</span>
         </div>
       `).join('')}
     </div>

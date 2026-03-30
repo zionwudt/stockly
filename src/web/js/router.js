@@ -9,7 +9,6 @@ let drawer = null;
 let drawerBackdrop = null;
 let drawerNav = null;
 let drawerOpen = false;
-let headerTenant = null;
 let confirmBackdrop = null;
 let confirmDialog = null;
 let confirmTitleEl = null;
@@ -17,9 +16,6 @@ let confirmMessageEl = null;
 let confirmCancelBtn = null;
 let confirmOkBtn = null;
 let confirmCallback = null;
-let dropdownBackdrop = null;
-let tenantDropdown = null;
-let dropdownOpen = false;
 let modalBackdrop = null;
 let modalDialog = null;
 let modalTitleEl = null;
@@ -83,7 +79,6 @@ export function start(container, header) {
   drawer = document.getElementById('drawer');
   drawerBackdrop = document.getElementById('drawer-backdrop');
   drawerNav = document.getElementById('drawer-nav');
-  headerTenant = document.getElementById('header-tenant');
   headerMenuBtn = document.getElementById('header-menu');
   headerBackBtn = document.getElementById('header-back');
 
@@ -93,9 +88,6 @@ export function start(container, header) {
   confirmMessageEl = document.getElementById('confirm-message');
   confirmCancelBtn = document.getElementById('confirm-cancel');
   confirmOkBtn = document.getElementById('confirm-ok');
-
-  dropdownBackdrop = document.getElementById('dropdown-backdrop');
-  tenantDropdown = document.getElementById('tenant-dropdown');
 
   modalBackdrop = document.getElementById('modal-backdrop');
   modalDialog = document.getElementById('modal-dialog');
@@ -119,13 +111,9 @@ export function start(container, header) {
   modalCancelBtn.addEventListener('click', closeModal);
   modalBackdrop.addEventListener('click', closeModal);
 
-  headerTenant.addEventListener('click', toggleTenantDropdown);
-  dropdownBackdrop.addEventListener('click', closeTenantDropdown);
-
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && drawerOpen) closeDrawer();
     if (e.key === 'Escape' && confirmDialog.classList.contains('show')) closeConfirm();
-    if (e.key === 'Escape' && dropdownOpen) closeTenantDropdown();
     if (e.key === 'Escape' && modalDialog.classList.contains('show')) closeModal();
   });
 
@@ -150,75 +138,6 @@ export function closeDrawer() {
   drawerBackdrop.classList.remove('show');
   drawerOpen = false;
   document.body.style.overflow = '';
-}
-
-export function toggleTenantDropdown() {
-  if (dropdownOpen) { closeTenantDropdown(); } else { openTenantDropdown(); }
-}
-
-export function openTenantDropdown() {
-  const { getState } = window.__app;
-  const { auth, tenantHub } = getState();
-  const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
-  if (tenants.length === 0) return;
-  renderTenantDropdown(tenants, auth?.current_tenant);
-  dropdownBackdrop.hidden = false;
-  tenantDropdown.hidden = false;
-  dropdownOpen = true;
-}
-
-export function closeTenantDropdown() {
-  dropdownBackdrop.hidden = true;
-  tenantDropdown.hidden = true;
-  dropdownOpen = false;
-}
-
-function renderTenantDropdown(tenants, currentTenantId) {
-  let html = '';
-  for (const tenant of tenants) {
-    const isCurrent = tenant.id === currentTenantId;
-    html += `
-      <div class="dropdown-item${isCurrent ? ' dropdown-item-active' : ''}" data-switch-tenant="${tenant.id}">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        <span class="dropdown-item-text">${escapeHtml(tenant.name)}</span>
-        ${isCurrent ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
-      </div>`;
-  }
-  html += `
-    <div class="dropdown-divider"></div>
-    <div class="dropdown-item" data-navigate-to="/tenants">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span class="dropdown-item-text">管理团队</span>
-    </div>`;
-  tenantDropdown.innerHTML = html;
-
-  tenantDropdown.querySelectorAll('[data-switch-tenant]').forEach(el => {
-    el.addEventListener('click', async () => {
-      const tenantId = Number(el.dataset.switchTenant);
-      closeTenantDropdown();
-      await switchToTenant(tenantId);
-    });
-  });
-  tenantDropdown.querySelectorAll('[data-navigate-to]').forEach(el => {
-    el.addEventListener('click', () => {
-      closeTenantDropdown();
-      navigate(el.dataset.navigateTo);
-    });
-  });
-}
-
-async function switchToTenant(tenantId) {
-  const { getState, api } = window.__app;
-  const { tenantHub, auth } = getState();
-  const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
-  const tenant = tenants.find(t => t.id === tenantId);
-  if (!tenant || tenant.id === auth?.current_tenant) return;
-  try {
-    await api.switchTenant({ tenant_id: tenantId });
-    await window.__app.refreshData(`已切换到 ${tenant.name}`);
-  } catch (err) {
-    window.__app.toast(err.message || '切换团队失败', 'error');
-  }
 }
 
 function escapeHtml(text) {
@@ -318,10 +237,6 @@ export function updateDrawerUser(name, tenant, avatarData) {
       avatarEl.textContent = name ? name[0].toUpperCase() : '仓';
     }
   }
-  if (headerTenant) {
-    headerTenant.textContent = tenant || '';
-    headerTenant.hidden = !tenant;
-  }
 }
 
 export function currentPath() {
@@ -374,9 +289,6 @@ function handleRoute() {
   const isSubPage = !!resolved.config.parent;
   headerMenuBtn.hidden = isSubPage;
   headerBackBtn.hidden = !isSubPage;
-
-  // 右上角始终显示租户名
-  if (headerTenant) headerTenant.hidden = !headerTenant.textContent;
 
   renderDrawer();
 }

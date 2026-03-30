@@ -65,6 +65,7 @@ class DocumentServiceMixin:
             d.status,
             d.created_at,
             COALESCE(p.name, '库存调整') AS partner_name,
+            COALESCE(u.display_name, u.username, '') AS created_by_name,
             (
                 SELECT COUNT(1)
                 FROM document_items di
@@ -72,6 +73,7 @@ class DocumentServiceMixin:
             ) AS item_count
         FROM documents d
         LEFT JOIN partners p ON p.id = d.partner_id AND p.tenant_id = d.tenant_id
+        LEFT JOIN users u ON u.id = d.created_by
         WHERE d.tenant_id = ?
         {type_filter}
         ORDER BY d.created_at DESC, d.id DESC
@@ -92,7 +94,8 @@ class DocumentServiceMixin:
                 i.document_id,
                 COALESCE(p.name, '商品已删除') AS product_name,
                 i.quantity,
-                i.unit_price
+                i.unit_price,
+                i.line_amount
             FROM document_items i
             LEFT JOIN products p ON p.id = i.product_id AND p.tenant_id = i.tenant_id
             WHERE i.tenant_id = ?
@@ -114,11 +117,48 @@ class DocumentServiceMixin:
                     "product_name": row["product_name"],
                     "quantity": row["quantity"],
                     "unit_price": row["unit_price"],
+                    "line_amount": row["line_amount"],
                 }
             )
 
         for document in documents:
             document["items"] = items_by_doc.get(int(document["id"]), [])
+
+        with get_connection(self.db_path) as connection:
+            audit_query = f"""
+            SELECT
+                a.document_id,
+                a.action,
+                a.reason,
+                a.created_at,
+                COALESCE(u.display_name, u.username, '') AS operator_name
+            FROM document_audit_logs a
+            LEFT JOIN users u ON u.id = a.user_id
+            WHERE a.tenant_id = ?
+              AND a.document_id IN ({placeholders})
+            ORDER BY a.document_id ASC, a.created_at ASC, a.id ASC
+            """
+            audit_rows = connection.execute(
+                audit_query,
+                (context.tenant_id, *document_ids),
+            ).fetchall()
+
+        audit_by_doc: dict[int, list[dict[str, Any]]] = {
+            document_id: [] for document_id in document_ids
+        }
+        for row in audit_rows:
+            document_id = int(row["document_id"])
+            audit_by_doc.setdefault(document_id, []).append(
+                {
+                    "action": row["action"],
+                    "reason": row["reason"],
+                    "created_at": row["created_at"],
+                    "operator_name": row["operator_name"],
+                }
+            )
+
+        for document in documents:
+            document["audit_logs"] = audit_by_doc.get(int(document["id"]), [])
 
         return documents
 
@@ -177,6 +217,7 @@ class DocumentServiceMixin:
                 None,
                 note_text,
                 0,
+                created_by=context.user_id,
             )
             self._insert_document_item(
                 connection,
@@ -218,8 +259,15 @@ class DocumentServiceMixin:
 
             void_reason = reason or "作废"
             connection.execute(
-                "UPDATE documents SET status = 'void', voided_at = ?, void_reason = ? WHERE id = ?",
-                (_db_now(), void_reason, document_id),
+                "UPDATE documents SET status = 'void', voided_at = ?, void_reason = ? WHERE id = ? AND tenant_id = ?",
+                (_db_now(), void_reason, document_id, context.tenant_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO document_audit_logs (tenant_id, document_id, action, user_id, reason, created_at)
+                VALUES (?, ?, 'void', ?, ?, ?)
+                """,
+                (context.tenant_id, document_id, context.user_id, void_reason, _db_now()),
             )
             connection.commit()
 
@@ -242,8 +290,15 @@ class DocumentServiceMixin:
             self._restore_stock_movements(connection, context.tenant_id, document_id)
 
             connection.execute(
-                "UPDATE documents SET status = 'active', voided_at = NULL, void_reason = NULL WHERE id = ?",
-                (document_id,),
+                "UPDATE documents SET status = 'active', voided_at = NULL, void_reason = NULL WHERE id = ? AND tenant_id = ?",
+                (document_id, context.tenant_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO document_audit_logs (tenant_id, document_id, action, user_id, reason, created_at)
+                VALUES (?, ?, 'restore', ?, '恢复单据', ?)
+                """,
+                (context.tenant_id, document_id, context.user_id, _db_now()),
             )
             connection.commit()
 
@@ -256,7 +311,13 @@ class DocumentServiceMixin:
         document_id: int,
     ) -> None:
         movements = connection.execute(
-            "SELECT product_id, movement_type, quantity_delta, unit_price, note FROM stock_movements WHERE document_id = ? AND tenant_id = ?",
+            """
+            SELECT product_id, movement_type, quantity_delta, unit_price, note
+            FROM stock_movements
+            WHERE document_id = ? AND tenant_id = ?
+              AND movement_type NOT LIKE '%_void'
+              AND movement_type NOT LIKE '%_restore'
+            """,
             (document_id, tenant_id),
         ).fetchall()
 
@@ -350,6 +411,7 @@ class DocumentServiceMixin:
                 partner_id,
                 note,
                 total_amount,
+                created_by=context.user_id,
             )
             self._insert_trade_items(
                 connection,
@@ -389,13 +451,14 @@ class DocumentServiceMixin:
         partner_id: int | None,
         note: str,
         total_amount: float,
+        created_by: int | None = None,
     ) -> int:
         connection.execute(
             """
-            INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, note, total_amount)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (tenant_id, doc_no, doc_type, partner_id, note, total_amount),
+            (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by),
         )
         return int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
 

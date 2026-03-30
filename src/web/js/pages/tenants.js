@@ -16,7 +16,6 @@ function render(container) {
   const myRequests = tenantHub?.my_join_requests || [];
   const pendingApprovals = tenantHub?.pending_approvals || [];
   const currentTenant = tenants.find(t => t.is_current);
-  const otherTenants = tenants.filter(t => !t.is_current);
 
   container.innerHTML = `
     <div class="page-section">
@@ -24,27 +23,28 @@ function render(container) {
         <h3>当前团队</h3>
       </div>
       ${currentTenant ? `
-      <div class="current-tenant-card">
+      <div class="current-tenant-card" data-action="switch-current" style="cursor:pointer;">
         <div class="current-tenant-main">
           <div class="current-tenant-name">${escapeHtml(currentTenant.name)}</div>
           <div class="current-tenant-meta">${escapeHtml(currentTenant.slug)} · ${currentTenant.member_count || 1} 人</div>
         </div>
-        <button class="btn btn-outline btn-sm" data-switch-tenant="${currentTenant.id}">切换</button>
+        <span class="text-text-4">${CHEVRON}</span>
       </div>` : '<div class="empty-hint">暂无当前团队</div>'}
     </div>
 
-    ${otherTenants.length ? `
+    ${tenants.length ? `
     <div class="page-section">
       <div class="section-header">
-        <h3>其他团队</h3>
-        <span class="section-hint">${otherTenants.length} 个</span>
+        <h3>团队列表</h3>
+        <span class="section-hint">${tenants.length} 个</span>
       </div>
       <div class="card-list" id="tenant-list">
-        ${otherTenants.map(t => `
+        ${tenants.map(t => `
           <div class="list-item list-item-row" data-view-detail="${t.id}">
             <div class="list-item-main">
               <div class="list-item-title">
                 ${escapeHtml(t.name)}
+                ${t.is_current ? '<span class="tag tag-green" style="margin-left:6px;font-size:11px;">当前</span>' : ''}
               </div>
               <div class="list-item-desc">
                 ${escapeHtml(t.slug)} · ${t.member_count || 1} 人
@@ -52,7 +52,7 @@ function render(container) {
               </div>
             </div>
             <div class="tenant-item-right">
-              ${t.is_owner ? '<span class="tag tag-green" style="margin-right:6px">所有者</span>' : ''}
+              ${t.is_owner ? '<span class="tag tag-green" style="margin-right:6px">所有者</span>' : t.is_admin ? '<span class="tag tag-blue" style="margin-right:6px">管理员</span>' : ''}
               <span class="text-text-4 list-chevron">${CHEVRON}</span>
             </div>
           </div>
@@ -73,26 +73,6 @@ function render(container) {
       </div>
     </div>
 
-    ${myRequests.length ? `
-    <div class="page-section" style="padding-top:0;">
-      <div class="section-header"><h3>我的申请</h3><span class="section-hint">${myRequests.length} 条</span></div>
-      <div class="card-list">
-        ${myRequests.map(r => `
-          <div class="list-item">
-            <div class="list-item-main">
-              <div class="list-item-title">${escapeHtml(r.tenant_name)}</div>
-              <div class="list-item-desc">${formatDateTime(r.created_at)}${r.note ? ' · ' + escapeHtml(r.note) : ''}</div>
-            </div>
-            <div class="list-item-right">
-              <span class="tag ${r.status === 'approved' ? 'tag-green' : r.status === 'rejected' ? 'tag-red' : 'tag-orange'}">
-                ${{ pending: '待处理', approved: '已通过', rejected: '已拒绝' }[r.status] || r.status}
-              </span>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>` : ''}
-
     ${pendingApprovals.length ? `
     <div class="page-section" style="padding-top:0;">
       <div class="section-header"><h3>待我审批</h3><span class="section-hint text-warning">${pendingApprovals.length} 条</span></div>
@@ -107,6 +87,26 @@ function render(container) {
             <div class="list-item-actions">
               <button class="btn btn-small btn-success" data-approve="${r.id}">同意</button>
               <button class="btn btn-small btn-outline" data-reject="${r.id}">拒绝</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
+    ${myRequests.length ? `
+    <div class="page-section" style="padding-top:0;">
+      <div class="section-header"><h3>我的申请</h3><span class="section-hint">${myRequests.length} 条</span></div>
+      <div class="card-list">
+        ${myRequests.map(r => `
+          <div class="list-item">
+            <div class="list-item-main">
+              <div class="list-item-title">${escapeHtml(r.tenant_name)}</div>
+              <div class="list-item-desc">${formatDateTime(r.created_at)}${r.note ? ' · ' + escapeHtml(r.note) : ''}</div>
+            </div>
+            <div class="list-item-right">
+              <span class="tag ${r.status === 'approved' ? 'tag-green' : r.status === 'rejected' ? 'tag-red' : 'tag-orange'}">
+                ${{ pending: '待处理', approved: '已通过', rejected: '已拒绝' }[r.status] || r.status}
+              </span>
             </div>
           </div>
         `).join('')}
@@ -129,12 +129,9 @@ function bindEvents(container) {
       return;
     }
 
-    const switchBtn = e.target.closest('[data-switch-tenant]');
-    if (switchBtn) {
-      const tenantId = Number(switchBtn.dataset.switchTenant);
-      if (tenantId) {
-        await switchToTenant(tenantId);
-      }
+    const switchCurrentBtn = e.target.closest('[data-action="switch-current"]');
+    if (switchCurrentBtn) {
+      openSwitchTenantModal();
       return;
     }
 
@@ -221,10 +218,53 @@ function openJoinTenantModal() {
   });
 }
 
+function openSwitchTenantModal() {
+  const { auth, tenantHub } = getState();
+  const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
+  if (tenants.length === 0) return;
+
+  const bodyHtml = `
+    <div class="card-list" id="modal-tenant-list">
+      ${tenants.map(t => {
+        const isCurrent = t.id === auth?.current_tenant;
+        return `
+        <div class="list-item list-item-row${isCurrent ? ' list-item-active' : ''}" data-pick-tenant="${t.id}" style="cursor:pointer;">
+          <div class="list-item-main">
+            <div class="list-item-title">${escapeHtml(t.name)}</div>
+            <div class="list-item-desc">${escapeHtml(t.slug)} · ${t.member_count || 1} 人</div>
+          </div>
+          ${isCurrent ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  openModal('切换团队', bodyHtml, null, { hideOk: true });
+
+  const list = document.getElementById('modal-tenant-list');
+  if (list) {
+    list.addEventListener('click', async (e) => {
+      const item = e.target.closest('[data-pick-tenant]');
+      if (!item) return;
+      const tenantId = Number(item.dataset.pickTenant);
+      if (tenantId === auth?.current_tenant) {
+        closeModal();
+        return;
+      }
+      closeModal();
+      await switchToTenant(tenantId);
+    });
+  }
+}
+
 async function switchToTenant(tenantId) {
   try {
     await api.switchTenant({ tenant_id: tenantId });
-    await window.__app.refreshData(`已切换到团队 ${tenantId}`);
+    const { auth, tenantHub } = getState();
+    const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
+    const tenant = tenants.find(t => t.id === tenantId);
+    const tenantName = tenant ? escapeHtml(tenant.name) : tenantId;
+    await window.__app.refreshData(`已切换到团队 ${tenantName}`);
   } catch (err) {
     toast(err.message || '切换团队失败', 'error');
   }

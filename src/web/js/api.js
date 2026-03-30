@@ -53,8 +53,8 @@ export const api = {
   suppliers: () => get('/api/suppliers'),
   customers: () => get('/api/customers'),
   stock: () => get('/api/stock'),
-  movements: (limit = 30) => get(`/api/movements?limit=${limit}`),
-  documents: (type, limit = 20) => {
+  movements: (limit = 200) => get(`/api/movements?limit=${limit}`),
+  documents: (type, limit = 200) => {
     const params = [];
     if (type) params.push(`type=${type}`);
     if (limit) params.push(`limit=${limit}`);

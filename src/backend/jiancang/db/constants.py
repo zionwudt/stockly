@@ -9,4 +9,5 @@ TENANTED_TABLES = [
     "documents",
     "document_items",
     "stock_movements",
+    "document_audit_logs",
 ]

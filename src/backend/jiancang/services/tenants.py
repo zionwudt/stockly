@@ -96,8 +96,12 @@ class TenantServiceMixin:
 
         with get_connection(self.db_path) as connection:
             request_row = self._pending_join_request(connection, request_id)
-            if int(request_row["owner_user_id"] or 0) != principal.user_id:
-                raise ValidationError("只有租户创建者可以处理加入申请。")
+            reviewer_membership = connection.execute(
+                "SELECT role FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+                (request_row["tenant_id"], principal.user_id),
+            ).fetchone()
+            if not reviewer_membership or reviewer_membership["role"] not in ("owner", "admin"):
+                raise ValidationError("只有所有者和管理员可以处理加入申请。")
 
             decided_at = db_now()
             if approved:
@@ -346,7 +350,6 @@ class TenantServiceMixin:
 
     def remove_member(self, principal: SessionPrincipal, tenant_id: int, user_id: int) -> dict[str, Any]:
         with get_connection(self.db_path) as connection:
-            # Check if current user is owner of this tenant
             current_membership = connection.execute(
                 """
                 SELECT role FROM tenant_memberships
@@ -355,10 +358,9 @@ class TenantServiceMixin:
                 """,
                 (tenant_id, principal.user_id),
             ).fetchone()
-            if not current_membership or current_membership["role"] != "owner":
-                raise ValidationError("只有租户创建者可以移除成员。")
+            if not current_membership or current_membership["role"] not in ("owner", "admin"):
+                raise ValidationError("只有所有者和管理员可以移除成员。")
             
-            # Check if target user is owner (can't remove owner)
             target_membership = connection.execute(
                 """
                 SELECT role FROM tenant_memberships
@@ -370,7 +372,9 @@ class TenantServiceMixin:
             if not target_membership:
                 raise ValidationError("该用户不是此租户的成员。")
             if target_membership["role"] == "owner":
-                raise ValidationError("不能移除创建者。")
+                raise ValidationError("不能移除所有者。")
+            if target_membership["role"] == "admin" and current_membership["role"] != "owner":
+                raise ValidationError("只有所有者可以移除管理员。")
             
             connection.execute(
                 "DELETE FROM tenant_memberships WHERE tenant_id = ? AND user_id = ?",

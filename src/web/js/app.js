@@ -60,13 +60,8 @@ async function boot() {
 
   // Update drawer user info
   const { auth, tenantHub } = getState();
-  const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
   const displayName = auth?.user?.display_name || auth?.user?.username || '';
-  let tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name;
-  if (!tenantName && auth?.current_tenant) {
-    const allTenants = [...(tenantHub?.accessible_tenants || []), ...(auth?.available_tenants || [])];
-    tenantName = allTenants.find(t => t.id === auth?.current_tenant)?.name || '';
-  }
+  const tenantName = auth?.current_tenant?.name || '';
   router.updateDrawerUser(displayName, tenantName, auth?.user?.avatar_data);
   if (!auth?.current_tenant) {
     router.navigate('/tenants');
@@ -116,15 +111,10 @@ window.__app = {
       if (auth?.current_tenant) {
         await loadWorkspace();
       }
-      // Update tenant name display
+      // Update drawer user info
       const { tenantHub } = getState();
-      const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
       const displayName = auth?.user?.display_name || auth?.user?.username || '';
-      let tenantName = tenants.find(t => t.id === auth?.current_tenant)?.name || '';
-      if (!tenantName && auth?.current_tenant) {
-        const allTenants = [...(tenantHub?.accessible_tenants || []), ...(auth?.available_tenants || [])];
-        tenantName = allTenants.find(t => t.id === auth?.current_tenant)?.name || '';
-      }
+      const tenantName = auth?.current_tenant?.name || '';
       router.updateDrawerUser(displayName, tenantName, auth?.user?.avatar_data);
       const hash = router.currentPath();
       const resolved = router.resolveRoute(hash);

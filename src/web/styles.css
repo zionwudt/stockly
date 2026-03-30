@@ -211,21 +211,6 @@ img { max-width: 100%; display: block; }
   justify-content: flex-end;
 }
 
-.header-tenant-btn {
-  max-width: 120px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--primary);
-  padding: 4px 10px;
-  border-radius: var(--r-xl);
-  background: var(--primary-light);
-  transition: background var(--t);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-}
-.header-tenant-btn:active { background: #cce5ff; }
 
 /* Main Content */
 .app-content {
@@ -922,6 +907,29 @@ select.form-input {
 .settings-arrow { flex-shrink: 0; color: var(--text-4); }
 .settings-item-avatar { margin-right: 4px; }
 
+/* Member list in tenant detail */
+.member-item-avatar {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), #4096ff);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+}
+.member-item-info { flex: 1; min-width: 0; }
+.member-item-name { font-size: 14px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.member-item-meta { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+
+/* Inline icon button (e.g., copy slug) */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: var(--r);
+  color: var(--text-3);
+  transition: background var(--t), color var(--t);
+}
+.icon-btn:active { background: var(--bg); color: var(--primary); }
+
 /* Avatars */
 .avatar-circle {
   width: 80px; height: 80px;
@@ -1063,6 +1071,55 @@ select.form-input {
 }
 
 .detail-list { border: 1px solid var(--divider); box-shadow: none; }
+
+/* Audit Logs */
+.detail-audit-logs {
+  margin-top: 12px;
+  padding: 0 12px 8px;
+}
+.detail-audit-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+.detail-audit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.detail-audit-action {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.detail-audit-action.is-void {
+  background: var(--danger-light, #fff1f0);
+  color: var(--danger);
+}
+.detail-audit-action.is-restore {
+  background: var(--success-light, #f6ffed);
+  color: var(--success);
+}
+.detail-audit-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-audit-time {
+  flex-shrink: 0;
+  color: var(--text-4);
+  font-size: 11px;
+}
 
 
 /* ============================================================
@@ -1407,38 +1464,6 @@ select.form-input {
 
 .drawer-text { flex: 1; font-size: 14px; font-weight: 500; }
 
-
-/* ============================================================
-   Dropdown Menu
-   ============================================================ */
-.dropdown-backdrop { position: fixed; inset: 0; z-index: 140; }
-
-.dropdown-menu {
-  position: fixed;
-  top: calc(var(--header-h) + var(--safe-top) + 6px);
-  right: 10px;
-  min-width: 190px;
-  background: var(--card);
-  border-radius: var(--r);
-  box-shadow: var(--s-lg);
-  z-index: 200;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.dropdown-item {
-  display: flex; align-items: center;
-  padding: 12px 14px; gap: 10px;
-  font-size: 14px; color: var(--text-1);
-  transition: background var(--t);
-  cursor: pointer;
-}
-.dropdown-item:hover,
-.dropdown-item:active { background: var(--bg); }
-.dropdown-item-active { color: var(--primary); }
-.dropdown-item svg { flex-shrink: 0; }
-.dropdown-item-text { flex: 1; font-weight: 500; }
-.dropdown-divider { height: 1px; background: var(--divider); margin: 3px 0; }
 
 
 /* ============================================================
@@ -2006,6 +2031,51 @@ select.form-input {
   color: var(--text-3);
   font-style: italic;
   margin-bottom: 8px;
+}
+
+/* Card audit logs */
+.doc-card-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 4px;
+  border-top: 1px dashed var(--divider);
+  margin-top: 4px;
+}
+.doc-card-audit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.doc-card-audit-tag {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.doc-card-audit-tag.is-void {
+  background: var(--danger-light, #fff1f0);
+  color: var(--danger);
+}
+.doc-card-audit-tag.is-restore {
+  background: var(--success-light, #f6ffed);
+  color: var(--success);
+}
+.doc-card-audit-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-card-audit-time {
+  flex-shrink: 0;
+  color: var(--text-4);
+  font-size: 10px;
 }
 
 .doc-card-foot {

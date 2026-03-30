@@ -60,6 +60,9 @@ function render(container) {
             <div class="settings-item">
               <span class="settings-text">团队标识</span>
               <span class="settings-item-value">${escapeHtml(tenant.slug)}</span>
+              <button class="icon-btn copy-slug-btn" data-copy="${escapeHtml(tenant.slug)}" title="复制团队标识" style="flex-shrink:0;margin-left:4px">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
             </div>
             <div class="settings-item">
               <span class="settings-text">所有者</span>
@@ -69,35 +72,6 @@ function render(container) {
               <span class="settings-text">创建时间</span>
               <span class="settings-item-value">${formatDateTime(tenant.created_at)}</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 成员列表 -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3>成员列表</h3>
-          <span class="section-hint">${members.length} 人</span>
-        </div>
-        <div class="settings-card">
-          <div class="settings-menu">
-            ${members.map(m => {
-              const canManage = isOwner && m.role !== 'owner';
-              const roleLabel = { owner: '所有者', admin: '管理员', member: '成员' }[m.role] || m.role;
-              const roleClass = m.role === 'owner' ? 'tag-green' : m.role === 'admin' ? 'tag-blue' : 'tag-orange';
-              return `
-              <div class="settings-item member-item${canManage ? ' profile-row' : ''}"
-                ${canManage ? `data-member-id="${m.user_id}" data-member-role="${m.role}" data-member-name="${escapeHtml(m.display_name || m.username)}"` : ''}
-                ${canManage ? 'role="button" tabindex="0"' : ''}>
-                <div class="member-item-avatar">${(m.display_name || m.username || '?')[0].toUpperCase()}</div>
-                <div class="member-item-info">
-                  <div class="member-item-name">${escapeHtml(m.display_name || m.username)}</div>
-                  <div class="member-item-meta">${formatDateTime(m.joined_at)}</div>
-                </div>
-                <span class="tag ${roleClass}" style="flex-shrink:0;margin-right:${canManage ? '6px' : '0'}">${roleLabel}</span>
-                ${canManage ? `<div class="settings-arrow">${CHEVRON}</div>` : ''}
-              </div>`;
-            }).join('')}
           </div>
         </div>
       </div>
@@ -127,12 +101,55 @@ function render(container) {
         </div>
       </div>
       ` : ''}
+
+      <!-- 成员列表 -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3>成员列表</h3>
+          <span class="section-hint">${members.length} 人</span>
+        </div>
+        <div class="settings-card">
+          <div class="settings-menu">
+            ${members.map(m => {
+              const canManage = (isOwner && m.role !== 'owner') || (user_role === 'admin' && m.role === 'member');
+              const roleLabel = { owner: '所有者', admin: '管理员', member: '成员' }[m.role] || m.role;
+              const roleClass = m.role === 'owner' ? 'tag-green' : m.role === 'admin' ? 'tag-blue' : 'tag-orange';
+              return `
+              <div class="settings-item member-item${canManage ? ' profile-row' : ''}"
+                ${canManage ? `data-member-id="${m.user_id}" data-member-role="${m.role}" data-member-name="${escapeHtml(m.display_name || m.username)}"` : ''}
+                ${canManage ? 'role="button" tabindex="0"' : ''}>
+                <div class="member-item-avatar">${(m.display_name || m.username || '?')[0].toUpperCase()}</div>
+                <div class="member-item-info">
+                  <div class="member-item-name">${escapeHtml(m.display_name || m.username)}</div>
+                  <div class="member-item-meta">${formatDateTime(m.joined_at)}</div>
+                </div>
+                <span class="tag ${roleClass}" style="flex-shrink:0;margin-right:${canManage ? '6px' : '0'}">${roleLabel}</span>
+                ${canManage ? `<div class="settings-arrow">${CHEVRON}</div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
 
 function bindEvents(container) {
   container.addEventListener('click', async (e) => {
+    // Copy slug
+    const copyBtn = e.target.closest('.copy-slug-btn');
+    if (copyBtn) {
+      e.stopPropagation();
+      const text = copyBtn.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast('已复制到剪贴板', 'success');
+      } catch {
+        toast('复制失败', 'error');
+      }
+      return;
+    }
+
     // Edit name
     const editRow = e.target.closest('#edit-name-row');
     if (editRow) {
@@ -208,17 +225,15 @@ function openEditNameModal(container) {
 }
 
 function openMemberActionModal(container, userId, currentRole, memberName) {
-  const isAdmin = currentRole === 'admin';
-  const toggleRoleLabel = isAdmin ? '撤销管理员' : '设为管理员';
-  const toggleRoleIcon = isAdmin
+  const { user_role } = tenantDetail;
+  const isCallerOwner = user_role === 'owner';
+  const isTargetAdmin = currentRole === 'admin';
+  const toggleRoleLabel = isTargetAdmin ? '撤销管理员' : '设为管理员';
+  const toggleRoleIcon = isTargetAdmin
     ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`
     : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`;
 
-  openModal(
-    `成员管理`,
-    `<p class="modal-member-name">${escapeHtml(memberName)}</p>
-     <div class="settings-card" style="margin-top:10px">
-       <div class="settings-menu">
+  const ownerOnlyActions = isCallerOwner ? `
          <button class="settings-item profile-row" id="modal-transfer-owner">
            <div class="menu-icon menu-icon-blue" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -227,12 +242,19 @@ function openMemberActionModal(container, userId, currentRole, memberName) {
            <div class="settings-arrow">${CHEVRON}</div>
          </button>
          <button class="settings-item profile-row" id="modal-change-role">
-           <div class="menu-icon ${isAdmin ? 'menu-icon-orange' : 'menu-icon-blue'}" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
+           <div class="menu-icon ${isTargetAdmin ? 'menu-icon-orange' : 'menu-icon-blue'}" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
              ${toggleRoleIcon}
            </div>
            <span class="settings-text">${toggleRoleLabel}</span>
            <div class="settings-arrow">${CHEVRON}</div>
-         </button>
+         </button>` : '';
+
+  openModal(
+    `成员管理`,
+    `<p class="modal-member-name">${escapeHtml(memberName)}</p>
+     <div class="settings-card" style="margin-top:10px">
+       <div class="settings-menu">
+         ${ownerOnlyActions}
          <button class="settings-item profile-row" id="modal-remove-member" style="color:var(--danger)">
            <div class="menu-icon menu-icon-red" style="width:30px;height:30px;border-radius:8px;flex-shrink:0">
              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
@@ -247,40 +269,42 @@ function openMemberActionModal(container, userId, currentRole, memberName) {
   );
 
   requestAnimationFrame(() => {
-    document.getElementById('modal-transfer-owner')?.addEventListener('click', () => {
-      closeModal();
-      openConfirm(
-        '转让所有权',
-        `确定要将团队所有权转让给 ${memberName} 吗？转让后你将成为管理员。`,
-        async () => {
-          try {
-            await api.transferOwnership(currentTenantId, { user_id: userId });
-            await loadTenantDetail(container);
-            toast('所有权已转让', 'success');
-          } catch (err) {
-            toast(err.message || '转让失败', 'error');
+    if (isCallerOwner) {
+      document.getElementById('modal-transfer-owner')?.addEventListener('click', () => {
+        closeModal();
+        openConfirm(
+          '转让所有权',
+          `确定要将团队所有权转让给 ${memberName} 吗？转让后你将成为管理员。`,
+          async () => {
+            try {
+              await api.transferOwnership(currentTenantId, { user_id: userId });
+              await loadTenantDetail(container);
+              toast('所有权已转让', 'success');
+            } catch (err) {
+              toast(err.message || '转让失败', 'error');
+            }
           }
-        }
-      );
-    });
+        );
+      });
 
-    document.getElementById('modal-change-role')?.addEventListener('click', () => {
-      closeModal();
-      const newRole = isAdmin ? 'member' : 'admin';
-      openConfirm(
-        '确认修改角色',
-        `确定要将 ${memberName} ${toggleRoleLabel}吗？`,
-        async () => {
-          try {
-            await api.updateMemberRole(currentTenantId, userId, { role: newRole });
-            await loadTenantDetail(container);
-            toast('角色已更新', 'success');
-          } catch (err) {
-            toast(err.message || '修改角色失败', 'error');
+      document.getElementById('modal-change-role')?.addEventListener('click', () => {
+        closeModal();
+        const newRole = isTargetAdmin ? 'member' : 'admin';
+        openConfirm(
+          '确认修改角色',
+          `确定要将 ${memberName} ${toggleRoleLabel}吗？`,
+          async () => {
+            try {
+              await api.updateMemberRole(currentTenantId, userId, { role: newRole });
+              await loadTenantDetail(container);
+              toast('角色已更新', 'success');
+            } catch (err) {
+              toast(err.message || '修改角色失败', 'error');
+            }
           }
-        }
-      );
-    });
+        );
+      });
+    }
 
     document.getElementById('modal-remove-member')?.addEventListener('click', () => {
       closeModal();

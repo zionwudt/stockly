@@ -30,10 +30,77 @@ def init_db(db_path: Path) -> None:
         _migrate_identity_schema(connection)
         _migrate_soft_delete(connection)
         _migrate_avatar(connection)
+        _migrate_admin_role(connection)
+        _migrate_stock_movement_types(connection)
         for statement in INDEX_STATEMENTS:
             connection.execute(statement)
         _seed_default_identity(connection)
         connection.commit()
+
+
+def _migrate_stock_movement_types(connection: sqlite3.Connection) -> None:
+    """Remove CHECK constraint on movement_type if present (older DBs had it)."""
+    if not _table_exists(connection, "stock_movements"):
+        return
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='stock_movements'"
+    ).fetchone()
+    if not row or "movement_type IN" not in (row["sql"] or ""):
+        return
+
+    connection.execute("""
+        CREATE TABLE stock_movements_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            product_id INTEGER NOT NULL,
+            document_id INTEGER,
+            movement_type TEXT NOT NULL,
+            quantity_delta REAL NOT NULL,
+            unit_price REAL NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(product_id) REFERENCES products(id),
+            FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE SET NULL
+        )
+    """)
+    connection.execute("""
+        INSERT INTO stock_movements_new (id, tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note, created_at)
+        SELECT id, tenant_id, product_id, document_id, movement_type, quantity_delta, unit_price, note, created_at FROM stock_movements
+    """)
+    connection.execute("DROP TABLE stock_movements")
+    connection.execute("ALTER TABLE stock_movements_new RENAME TO stock_movements")
+
+
+def _migrate_admin_role(connection: sqlite3.Connection) -> None:
+    """Rebuild tenant_memberships to allow 'admin' role (was only 'owner'/'member')."""
+    if not _table_exists(connection, "tenant_memberships"):
+        return
+    # Check if the constraint already allows 'admin' by inspecting the SQL
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='tenant_memberships'"
+    ).fetchone()
+    if row and "'admin'" in row["sql"]:
+        return  # Already migrated
+
+    connection.execute("""
+        CREATE TABLE tenant_memberships_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'member')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, user_id),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    connection.execute("""
+        INSERT INTO tenant_memberships_new (id, tenant_id, user_id, role, created_at)
+        SELECT id, tenant_id, user_id, role, created_at FROM tenant_memberships
+    """)
+    connection.execute("DROP TABLE tenant_memberships")
+    connection.execute("ALTER TABLE tenant_memberships_new RENAME TO tenant_memberships")
 
 
 def _migrate_legacy_schema(connection: sqlite3.Connection) -> None:
@@ -87,6 +154,7 @@ def _migrate_soft_delete(connection: sqlite3.Connection) -> None:
         )
         _ensure_column(connection, "documents", "voided_at", "TEXT")
         _ensure_column(connection, "documents", "void_reason", "TEXT")
+        _ensure_column(connection, "documents", "created_by", "INTEGER")
 
 
 def _migrate_avatar(connection: sqlite3.Connection) -> None:
