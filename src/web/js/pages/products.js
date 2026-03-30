@@ -8,7 +8,7 @@ import {
   toast,
 } from '../utils.js';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 let visibleCount = PAGE_SIZE;
 let keyword = '';
 

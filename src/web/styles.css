@@ -815,12 +815,21 @@ textarea.form-input {
 select.form-input {
   appearance: none;
   -webkit-appearance: none;
+  -moz-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238c8c8c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   background-size: 12px;
   padding-right: 36px;
   cursor: pointer;
+}
+
+.form-field select option {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #fff;
+  color: var(--text-1);
 }
 
 .form-field input::placeholder,
@@ -1351,12 +1360,10 @@ select.form-input {
   font-size: 12px;
   opacity: .85;
   margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   background: rgba(255,255,255,.18);
   border-radius: 20px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2093,20 +2100,12 @@ select.form-input {
   gap: 10px;
 }
 
-.doc-filter-controls {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .doc-filter-range {
-  flex: 1 1 240px;
-  min-width: 220px;
+  min-width: 100%;
   margin-bottom: 0;
 }
 
 .doc-filter-search {
-  flex: 1 1 200px;
   margin-bottom: 0;
 }
 

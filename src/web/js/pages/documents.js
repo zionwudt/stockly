@@ -5,7 +5,7 @@ import { openConfirm, openModal, closeModal, setHeaderAction } from '../router.j
 import { openPurchaseModal } from './purchase.js';
 import { openSaleModal } from './sale.js';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 let docFilter = 'all';
 let docItemKeyword = '';
@@ -39,20 +39,18 @@ function render(container) {
           <button class="filter-btn ${docFilter === 'sale' ? 'active' : ''}" data-filter="sale">销售</button>
           <button class="filter-btn ${docFilter === 'adjustment' ? 'active' : ''}" data-filter="adjustment">调整</button>
         </div>
-        <div class="doc-filter-controls">
-          <div class="date-range-row doc-filter-range">
-            <input type="date" class="date-input" id="date-from" value="${dateFrom}" placeholder="开始日期">
-            <span class="date-sep">—</span>
-            <input type="date" class="date-input" id="date-to" value="${dateTo}" placeholder="结束日期">
-            <button class="date-clear-btn" id="date-clear" title="清除">✕</button>
-          </div>
-          <div class="search-bar doc-filter-search">
-            <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input id="doc-item-search" type="text" placeholder="按商品名搜索" value="${escapeHtml(docItemKeyword)}" />
-          </div>
+        <div class="search-bar doc-filter-search">
+          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input id="doc-item-search" type="text" placeholder="按商品名搜索" value="${escapeHtml(docItemKeyword)}" />
+        </div>
+        <div class="date-range-row doc-filter-range">
+          <input type="date" class="date-input" id="date-from" value="${dateFrom}" placeholder="开始日期">
+          <span class="date-sep">—</span>
+          <input type="date" class="date-input" id="date-to" value="${dateTo}" placeholder="结束日期">
+          <button class="date-clear-btn" id="date-clear" title="清除">✕</button>
         </div>
       </div>
     </div>

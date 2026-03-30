@@ -44,7 +44,7 @@ class DocumentServiceMixin:
         self,
         context: RequestContext,
         doc_type: str | None = None,
-        limit: int = 50,
+        limit: int = 20,
     ) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 200))
         parameters: list[Any] = [context.tenant_id]

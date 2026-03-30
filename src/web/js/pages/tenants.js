@@ -16,12 +16,12 @@ function render(container) {
   const myRequests = tenantHub?.my_join_requests || [];
   const pendingApprovals = tenantHub?.pending_approvals || [];
   const currentTenant = tenants.find(t => t.is_current);
+  const otherTenants = tenants.filter(t => !t.is_current);
 
   container.innerHTML = `
     <div class="page-section">
       <div class="section-header">
-        <h3>我的团队</h3>
-        <span class="section-hint">${tenants.length} 个</span>
+        <h3>当前团队</h3>
       </div>
       ${currentTenant ? `
       <div class="current-tenant-card">
@@ -30,9 +30,17 @@ function render(container) {
           <div class="current-tenant-meta">${escapeHtml(currentTenant.slug)} · ${currentTenant.member_count || 1} 人</div>
         </div>
         <button class="btn btn-outline btn-sm" data-switch-tenant="${currentTenant.id}">切换</button>
-      </div>` : ''}
+      </div>` : '<div class="empty-hint">暂无当前团队</div>'}
+    </div>
+
+    ${otherTenants.length ? `
+    <div class="page-section">
+      <div class="section-header">
+        <h3>其他团队</h3>
+        <span class="section-hint">${otherTenants.length} 个</span>
+      </div>
       <div class="card-list" id="tenant-list">
-        ${tenants.length ? tenants.map(t => `
+        ${otherTenants.map(t => `
           <div class="list-item list-item-row" data-view-detail="${t.id}">
             <div class="list-item-main">
               <div class="list-item-title">
@@ -48,9 +56,9 @@ function render(container) {
               <span class="text-text-4 list-chevron">${CHEVRON}</span>
             </div>
           </div>
-        `).join('') : '<div class="empty-hint">暂无团队</div>'}
+        `).join('')}
       </div>
-    </div>
+    </div>` : ''}
 
     <div class="page-section" style="padding-top:0;">
       <div class="tenant-action-btns">

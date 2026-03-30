@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import random
 from typing import Any
 
 from ..db import get_connection
@@ -421,11 +422,8 @@ class TenantServiceMixin:
         return {"message": "团队所有权已转让。"}
 
     def _next_tenant_slug(self, connection: sqlite3.Connection, name: str) -> str:
-        import random
-        # Generate a QQ-style friendly numeric slug: t- + 9 digits
-        for attempt in range(100):
-            suffix = "".join(random.choices("0123456789", k=9))
-            candidate = f"t-{suffix}"
+        while True:
+            candidate = str(random.randint(10000000, 99999999))
             exists = connection.execute(
                 "SELECT 1 FROM tenants WHERE slug = ? LIMIT 1",
                 (candidate,),

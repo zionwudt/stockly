@@ -57,11 +57,12 @@ def test_register_user_auto_creates_default_tenant_and_can_switch(service: Inven
     assert principal.tenant_id is not None
     assert registered_principal.tenant_id == principal.tenant_id
     assert principal.tenant_name == "测试成员 的默认租户"
-    assert principal.tenant_slug == "member-a-default"
+    # Default tenant slugs are now auto-generated 8-digit numbers
+    assert principal.tenant_slug.isdigit() and len(principal.tenant_slug) == 8
 
     initial_profile = service.get_auth_profile(principal)
     assert initial_profile["current_tenant"] is not None
-    assert initial_profile["current_tenant"]["slug"] == "member-a-default"
+    assert initial_profile["current_tenant"]["slug"].isdigit() and len(initial_profile["current_tenant"]["slug"]) == 8
     assert initial_profile["available_tenants"][0]["is_owner"] is True
 
     result = service.create_tenant(
@@ -77,9 +78,11 @@ def test_register_user_auto_creates_default_tenant_and_can_switch(service: Inven
     )
     profile = service.get_auth_profile(switched)
 
-    assert result["tenant"]["slug"] == "tenant"
-    assert profile["current_tenant"]["slug"] == "tenant"
-    assert any(item["slug"] == "member-a-default" for item in profile["available_tenants"])
+    # New tenants also get auto-generated 8-digit slugs
+    assert result["tenant"]["slug"].isdigit() and len(result["tenant"]["slug"]) == 8
+    assert profile["current_tenant"]["slug"].isdigit() and len(profile["current_tenant"]["slug"]) == 8
+    # Verify the first tenant (default) still exists in available tenants
+    assert len(profile["available_tenants"]) >= 2
 
 
 def test_switching_tenant_updates_last_used_tenant_for_next_login(service: InventoryService) -> None:
@@ -122,8 +125,10 @@ def test_switching_tenant_updates_last_used_tenant_for_next_login(service: Inven
         }
     )
 
-    assert principal.tenant_slug == "tenant-2"
-    assert relogin_principal.tenant_slug == "tenant-2"
+    # Both principals should be on the second tenant (auto-generated 8-digit slug)
+    assert principal.tenant_slug.isdigit() and len(principal.tenant_slug) == 8
+    assert relogin_principal.tenant_slug.isdigit() and len(relogin_principal.tenant_slug) == 8
+    assert principal.tenant_slug == relogin_principal.tenant_slug
     with get_connection(service.db_path) as connection:
         last_tenant_id = connection.execute(
             "SELECT last_tenant_id FROM users WHERE username = ?",
@@ -150,8 +155,10 @@ def test_register_user_creates_unique_default_tenant_slug(service: InventoryServ
         }
     )
 
-    assert first_principal.tenant_slug == "same-user-default"
-    assert second_principal.tenant_slug == "same-user-default-2"
+    # Each user gets a unique 8-digit default tenant slug
+    assert first_principal.tenant_slug.isdigit() and len(first_principal.tenant_slug) == 8
+    assert second_principal.tenant_slug.isdigit() and len(second_principal.tenant_slug) == 8
+    assert first_principal.tenant_slug != second_principal.tenant_slug
 
 
 def test_create_tenant_auto_generates_unique_slug_when_missing(service: InventoryService) -> None:
@@ -167,8 +174,10 @@ def test_create_tenant_auto_generates_unique_slug_when_missing(service: Inventor
     first = service.create_tenant(principal, {"name": "North Warehouse"})
     second = service.create_tenant(principal, {"name": "North Warehouse"})
 
-    assert first["tenant"]["slug"] == "north-warehouse"
-    assert second["tenant"]["slug"] == "north-warehouse-2"
+    # Both tenants get unique 8-digit auto-generated slugs
+    assert first["tenant"]["slug"].isdigit() and len(first["tenant"]["slug"]) == 8
+    assert second["tenant"]["slug"].isdigit() and len(second["tenant"]["slug"]) == 8
+    assert first["tenant"]["slug"] != second["tenant"]["slug"]
 
 
 def test_user_can_request_join_tenant_and_owner_can_approve(service: InventoryService) -> None:
@@ -217,8 +226,10 @@ def test_user_can_request_join_tenant_and_owner_can_approve(service: InventorySe
     assert review_result["message"].startswith("已同意")
     assert restored is not None
     restored_profile = service.get_auth_profile(restored)
-    assert restored.tenant_slug == "tenant-member-default"
-    assert restored_profile["current_tenant"]["slug"] == "tenant-member-default"
+    # Default tenant slug is auto-generated 8-digit number
+    assert restored.tenant_slug.isdigit() and len(restored.tenant_slug) == 8
+    assert restored_profile["current_tenant"]["slug"].isdigit() and len(restored_profile["current_tenant"]["slug"]) == 8
+    # Manually created tenant with explicit slug should have that slug
     assert any(item["slug"] == "approval-tenant" for item in restored_profile["available_tenants"])
 
 

@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { openModal, closeModal, openConfirm, setHeaderAction } from '../router.js';
 import { escapeHtml, toast } from '../utils.js';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 let visibleCount = PAGE_SIZE;
 let keyword = '';
 

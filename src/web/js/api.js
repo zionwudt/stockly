@@ -54,7 +54,7 @@ export const api = {
   customers: () => get('/api/customers'),
   stock: () => get('/api/stock'),
   movements: (limit = 30) => get(`/api/movements?limit=${limit}`),
-  documents: (type, limit = 50) => {
+  documents: (type, limit = 20) => {
     const params = [];
     if (type) params.push(`type=${type}`);
     if (limit) params.push(`limit=${limit}`);

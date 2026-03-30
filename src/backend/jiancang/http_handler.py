@@ -418,10 +418,10 @@ class JianCangHandler(BaseHTTPRequestHandler):
         elif path == "/api/stock":
             result = self.service.get_stock_overview(context)
         elif path == "/api/movements":
-            limit = int(query.get("limit", ["30"])[0])
+            limit = int(query.get("limit", ["20"])[0])
             result = self.service.list_movements(context, limit)
         elif path == "/api/documents":
-            limit = int(query.get("limit", ["50"])[0])
+            limit = int(query.get("limit", ["20"])[0])
             doc_type = query.get("type", [""])[0] or None
             result = self.service.list_documents(
                 context, doc_type=doc_type, limit=limit

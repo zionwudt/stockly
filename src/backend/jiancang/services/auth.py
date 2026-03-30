@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import random
 from typing import Any
 
 from ..db import get_connection
@@ -416,20 +417,11 @@ class AuthServiceMixin:
         return {"id": tenant_id, "name": name, "slug": slug}
 
     def _next_default_tenant_slug(self, connection: sqlite3.Connection, username: str) -> str:
-        base = re.sub(r"[^a-z0-9-]+", "-", username.replace("_", "-")).strip("-")
-        if not base:
-            base = "user"
-        base = base[:24].rstrip("-") or "user"
-        candidate_base = f"{base}-default"
-        candidate = candidate_base
-        suffix = 2
-
         while True:
+            candidate = str(random.randint(10000000, 99999999))
             exists = connection.execute(
                 "SELECT 1 FROM tenants WHERE slug = ? LIMIT 1",
                 (candidate,),
             ).fetchone()
             if exists is None:
                 return candidate
-            candidate = f"{candidate_base[: max(1, 32 - len(str(suffix)) - 1)]}-{suffix}"
-            suffix += 1
