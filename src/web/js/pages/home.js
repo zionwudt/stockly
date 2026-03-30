@@ -1,6 +1,9 @@
 import { getState, loadSummary, loadStock, loadMovements } from '../store.js';
 import { api } from '../api.js';
 import { formatCurrency, formatShortCurrency, formatQuantity, formatDateTime, typeTag, escapeHtml, toast } from '../utils.js';
+import { openPurchaseModal } from './purchase.js';
+import { openSaleModal } from './sale.js';
+import { openAdjustmentModal } from './adjustment.js';
 
 export function mount(container) {
   const { auth, summary, stock, movements } = getState();
@@ -115,10 +118,15 @@ export function mount(container) {
   `;
 
   // 绑定快捷操作
+  const actionMap = {
+    purchase: openPurchaseModal,
+    sale: openSaleModal,
+    adjustment: openAdjustmentModal,
+  };
   container.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const action = btn.dataset.action;
-      window.__app.navigate('/' + action);
+      const fn = actionMap[btn.dataset.action];
+      if (fn) fn();
     });
   });
 

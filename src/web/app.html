@@ -3,19 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>简仓</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="app-body">
   <header class="app-header" id="app-header">
-    <button class="fab-menu" id="header-menu">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
+    <!-- 左侧：汉堡菜单（一级页面）或返回按钮（二级页面） -->
+    <div class="header-left">
+      <button class="header-icon-btn" id="header-menu" aria-label="菜单">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button class="header-icon-btn header-back-btn" id="header-back" aria-label="返回" hidden>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
+
+    <!-- 中间：页面标题 -->
     <h1 class="header-title" id="header-title">简仓</h1>
-    <div class="header-right" id="header-right">
-      <div class="header-tenant" id="header-tenant"></div>
+
+    <!-- 右侧：当前租户名（可点击切换） -->
+    <div class="header-right">
+      <button class="header-tenant-btn" id="header-tenant" aria-label="切换租户"></button>
     </div>
   </header>
 
@@ -25,43 +35,45 @@
 
   <main class="app-content" id="page"></main>
 
+  <!-- 侧滑抽屉 -->
   <div class="drawer-backdrop" id="drawer-backdrop"></div>
   <aside class="drawer" id="drawer">
     <div class="drawer-header">
       <div class="drawer-user">
         <div class="drawer-avatar" id="drawer-avatar"></div>
         <div class="drawer-info">
-          <div class="drawer-name" id="drawer-name"></div>
-          <div class="drawer-tenant" id="drawer-tenant"></div>
+          <div class="drawer-name" id="drawer-name">简仓</div>
+          <div class="drawer-tenant" id="drawer-tenant">进销存管理系统</div>
         </div>
       </div>
     </div>
     <nav class="drawer-nav" id="drawer-nav"></nav>
   </aside>
 
-  <div id="toast-container" class="toast-container"></div>
+  <!-- Toast 通知 -->
+  <div id="toast-container" class="toast-container" role="status" aria-live="polite"></div>
 
   <!-- 确认弹框 -->
-  <div class="confirm-backdrop" id="confirm-backdrop"></div>
-  <div class="confirm-dialog" id="confirm-dialog">
-    <div class="confirm-content">
-      <h3 class="confirm-title" id="confirm-title"></h3>
-      <p class="confirm-message" id="confirm-message"></p>
-      <div class="confirm-actions">
-        <button class="btn btn-secondary" id="confirm-cancel">取消</button>
+  <div class="overlay-backdrop" id="confirm-backdrop"></div>
+  <div class="overlay-dialog" id="confirm-dialog" role="alertdialog" aria-modal="true">
+    <div class="overlay-content">
+      <h3 class="overlay-title" id="confirm-title"></h3>
+      <p class="overlay-message" id="confirm-message"></p>
+      <div class="overlay-actions">
+        <button class="btn btn-ghost" id="confirm-cancel">取消</button>
         <button class="btn btn-danger" id="confirm-ok">确认</button>
       </div>
     </div>
   </div>
 
   <!-- 表单弹框 -->
-  <div class="modal-backdrop" id="modal-backdrop"></div>
-  <div class="modal-dialog" id="modal-dialog">
-    <div class="modal-content">
-      <h3 class="modal-title" id="modal-title"></h3>
-      <div class="modal-body" id="modal-body"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="modal-cancel">取消</button>
+  <div class="overlay-backdrop" id="modal-backdrop"></div>
+  <div class="overlay-dialog" id="modal-dialog" role="dialog" aria-modal="true">
+    <div class="overlay-content">
+      <h3 class="overlay-title" id="modal-title"></h3>
+      <div class="overlay-body" id="modal-body"></div>
+      <div class="overlay-actions">
+        <button class="btn btn-ghost" id="modal-cancel">取消</button>
         <button class="btn btn-primary" id="modal-ok">确定</button>
       </div>
     </div>

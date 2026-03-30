@@ -1,6 +1,10 @@
 import { getState, loadDocuments } from '../store.js';
 import { api } from '../api.js';
 import { formatCurrency, formatDateTime, typeTag, typeLabel, escapeHtml, toast } from '../utils.js';
+import { openConfirm } from '../router.js';
+import { openPurchaseModal } from './purchase.js';
+import { openSaleModal } from './sale.js';
+import { openAdjustmentModal } from './adjustment.js';
 
 let docFilter = 'all';
 
@@ -80,8 +84,10 @@ function bindEvents(container) {
   const fab = container.querySelector('#new-doc-btn');
   if (fab) {
     fab.addEventListener('click', () => {
+      const modalMap = { purchase: openPurchaseModal, sale: openSaleModal, adjustment: openAdjustmentModal };
       const type = docFilter !== 'all' ? docFilter : 'purchase';
-      window.__app.navigate('/' + type);
+      const fn = modalMap[type];
+      if (fn) fn();
     });
   }
 
@@ -90,14 +96,14 @@ function bindEvents(container) {
     if (!voidBtn) return;
 
     const docId = voidBtn.dataset.id;
-    if (!confirm('确定要作废此单据吗？作废后将冲销库存。')) return;
-
-    try {
-      await api.voidDocument(docId);
-      await window.__app.refreshData('单据已作废');
-    } catch (err) {
-      toast(err.message || '作废单据失败', 'error');
-    }
+    openConfirm('作废单据', '确定要作废此单据吗？作废后将冲销库存。', async () => {
+      try {
+        await api.voidDocument(docId);
+        await window.__app.refreshData('单据已作废');
+      } catch (err) {
+        toast(err.message || '作废单据失败', 'error');
+      }
+    });
   });
 }
 

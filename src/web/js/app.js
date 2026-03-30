@@ -13,9 +13,6 @@ import * as suppliers from './pages/suppliers.js';
 import * as customers from './pages/customers.js';
 import * as tenants from './pages/tenants.js';
 import * as tenantDetail from './pages/tenant-detail.js';
-import * as purchase from './pages/purchase.js';
-import * as sale from './pages/sale.js';
-import * as adjustment from './pages/adjustment.js';
 
 const FLASH_KEY = 'jiancang_flash';
 const AUTH_PATH = '/';
@@ -27,19 +24,10 @@ const ROUTES = {
   '/documents':  { module: documents,  title: '单据列表' },
   '/account':    { module: account,    title: '账号管理' },
   '/products':   { module: products,   title: '商品列表' },
-  '/products/create': { module: products, title: '新增商品', parent: '/products' },
-  '/products/detail': { module: products, title: '商品详情', parent: '/products' },
   '/suppliers':  { module: suppliers,  title: '供应商列表' },
-  '/suppliers/create': { module: suppliers, title: '新增供应商' },
-  '/suppliers/detail': { module: suppliers, title: '供应商详情' },
   '/customers':  { module: customers,  title: '客户列表' },
-  '/customers/create': { module: customers, title: '新增客户', parent: '/customers' },
-  '/customers/detail': { module: customers, title: '客户详情', parent: '/customers' },
   '/tenants':    { module: tenants,    title: '团队管理' },
   '/tenants/detail': { module: tenantDetail, title: '团队详情', parent: '/tenants' },
-  '/purchase':   { module: purchase,   title: '采购入库' },
-  '/sale':       { module: sale,       title: '销售出库' },
-  '/adjustment': { module: adjustment, title: '库存调整' },
 };
 
 async function boot() {

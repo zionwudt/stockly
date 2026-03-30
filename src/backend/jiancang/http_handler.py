@@ -343,6 +343,20 @@ class JianCangHandler(BaseHTTPRequestHandler):
             self._send_json(result)
             return True
 
+        supplier_match = re.fullmatch(r"/api/suppliers/(\d+)", path)
+        if supplier_match:
+            partner_id = int(supplier_match.group(1))
+            result = self.service.update_partner(context, partner_id, "supplier", payload)
+            self._send_json(result)
+            return True
+
+        customer_match = re.fullmatch(r"/api/customers/(\d+)", path)
+        if customer_match:
+            partner_id = int(customer_match.group(1))
+            result = self.service.update_partner(context, partner_id, "customer", payload)
+            self._send_json(result)
+            return True
+
         return False
 
     def _handle_identity_get(self, path: str) -> bool:

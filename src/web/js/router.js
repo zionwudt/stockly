@@ -3,7 +3,8 @@ let routes = {};
 let currentPage = null;
 let pageContainer = null;
 let headerTitle = null;
-let tabBar = null;
+let headerMenuBtn = null;
+let headerBackBtn = null;
 let drawer = null;
 let drawerBackdrop = null;
 let drawerNav = null;
@@ -75,78 +76,65 @@ export function back() {
   }
 }
 
-export function start(container, header, tabs) {
+export function start(container, header) {
   pageContainer = container;
   headerTitle = header;
-  tabBar = tabs;
-  
+
   drawer = document.getElementById('drawer');
   drawerBackdrop = document.getElementById('drawer-backdrop');
   drawerNav = document.getElementById('drawer-nav');
   headerTenant = document.getElementById('header-tenant');
-  
+  headerMenuBtn = document.getElementById('header-menu');
+  headerBackBtn = document.getElementById('header-back');
+
   confirmBackdrop = document.getElementById('confirm-backdrop');
   confirmDialog = document.getElementById('confirm-dialog');
   confirmTitleEl = document.getElementById('confirm-title');
   confirmMessageEl = document.getElementById('confirm-message');
   confirmCancelBtn = document.getElementById('confirm-cancel');
   confirmOkBtn = document.getElementById('confirm-ok');
-  
+
   dropdownBackdrop = document.getElementById('dropdown-backdrop');
   tenantDropdown = document.getElementById('tenant-dropdown');
-  
+
   modalBackdrop = document.getElementById('modal-backdrop');
   modalDialog = document.getElementById('modal-dialog');
   modalTitleEl = document.getElementById('modal-title');
   modalBodyEl = document.getElementById('modal-body');
   modalCancelBtn = document.getElementById('modal-cancel');
   modalOkBtn = document.getElementById('modal-ok');
-  
-  const headerMenu = document.getElementById('header-menu');
-  headerMenu.addEventListener('click', toggleDrawer);
+
+  headerMenuBtn.addEventListener('click', toggleDrawer);
+  headerBackBtn.addEventListener('click', back);
   drawerBackdrop.addEventListener('click', closeDrawer);
-  
+
   confirmCancelBtn.addEventListener('click', closeConfirm);
   confirmOkBtn.addEventListener('click', () => {
     closeConfirm();
     if (confirmCallback) confirmCallback();
   });
   confirmBackdrop.addEventListener('click', closeConfirm);
-  
-  // 模态框事件
+
   modalCancelBtn.addEventListener('click', closeModal);
   modalBackdrop.addEventListener('click', closeModal);
-  
-  // 租户下拉菜单事件
+
   headerTenant.addEventListener('click', toggleTenantDropdown);
   dropdownBackdrop.addEventListener('click', closeTenantDropdown);
-  
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && drawerOpen) {
-      closeDrawer();
-    }
-    if (e.key === 'Escape' && confirmDialog.classList.contains('show')) {
-      closeConfirm();
-    }
-    if (e.key === 'Escape' && dropdownOpen) {
-      closeTenantDropdown();
-    }
-    if (e.key === 'Escape' && modalDialog.classList.contains('show')) {
-      closeModal();
-    }
+    if (e.key === 'Escape' && drawerOpen) closeDrawer();
+    if (e.key === 'Escape' && confirmDialog.classList.contains('show')) closeConfirm();
+    if (e.key === 'Escape' && dropdownOpen) closeTenantDropdown();
+    if (e.key === 'Escape' && modalDialog.classList.contains('show')) closeModal();
   });
-  
+
   renderDrawer();
   window.addEventListener('hashchange', handleRoute);
   handleRoute();
 }
 
 export function toggleDrawer() {
-  if (drawerOpen) {
-    closeDrawer();
-  } else {
-    openDrawer();
-  }
+  if (drawerOpen) { closeDrawer(); } else { openDrawer(); }
 }
 
 export function openDrawer() {
@@ -163,24 +151,16 @@ export function closeDrawer() {
   document.body.style.overflow = '';
 }
 
-// 租户下拉菜单相关函数
 export function toggleTenantDropdown() {
-  if (dropdownOpen) {
-    closeTenantDropdown();
-  } else {
-    openTenantDropdown();
-  }
+  if (dropdownOpen) { closeTenantDropdown(); } else { openTenantDropdown(); }
 }
 
 export function openTenantDropdown() {
   const { getState } = window.__app;
   const { auth, tenantHub } = getState();
   const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
-  
   if (tenants.length === 0) return;
-  
   renderTenantDropdown(tenants, auth?.current_tenant);
-  
   dropdownBackdrop.hidden = false;
   tenantDropdown.hidden = false;
   dropdownOpen = true;
@@ -194,35 +174,23 @@ export function closeTenantDropdown() {
 
 function renderTenantDropdown(tenants, currentTenantId) {
   let html = '';
-  
   for (const tenant of tenants) {
     const isCurrent = tenant.id === currentTenantId;
     html += `
-      <div class="dropdown-item" data-switch-tenant="${tenant.id}">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-        </svg>
+      <div class="dropdown-item${isCurrent ? ' dropdown-item-active' : ''}" data-switch-tenant="${tenant.id}">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
         <span class="dropdown-item-text">${escapeHtml(tenant.name)}</span>
-        ${isCurrent ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--success)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
-      </div>
-    `;
+        ${isCurrent ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+      </div>`;
   }
-  
-  // 添加管理团队选项
   html += `
+    <div class="dropdown-divider"></div>
     <div class="dropdown-item" data-navigate-to="/tenants">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="dropdown-item-text">管理团队</span>
-    </div>
-  `;
-  
+    </div>`;
   tenantDropdown.innerHTML = html;
-  
-  // 绑定切换租户事件
+
   tenantDropdown.querySelectorAll('[data-switch-tenant]').forEach(el => {
     el.addEventListener('click', async () => {
       const tenantId = Number(el.dataset.switchTenant);
@@ -230,13 +198,10 @@ function renderTenantDropdown(tenants, currentTenantId) {
       await switchToTenant(tenantId);
     });
   });
-  
-  // 绑定导航到租户管理页面事件
   tenantDropdown.querySelectorAll('[data-navigate-to]').forEach(el => {
     el.addEventListener('click', () => {
-      const path = el.dataset.navigateTo;
       closeTenantDropdown();
-      navigate(path);
+      navigate(el.dataset.navigateTo);
     });
   });
 }
@@ -246,19 +211,12 @@ async function switchToTenant(tenantId) {
   const { tenantHub, auth } = getState();
   const tenants = tenantHub?.accessible_tenants || auth?.available_tenants || [];
   const tenant = tenants.find(t => t.id === tenantId);
-  
-  if (!tenant) return;
-  
-  if (tenant.id === auth?.current_tenant) {
-    return;
-  }
-  
+  if (!tenant || tenant.id === auth?.current_tenant) return;
   try {
     await api.switchTenant({ tenant_id: tenantId });
     await window.__app.refreshData(`已切换到 ${tenant.name}`);
   } catch (err) {
-    const { toast } = window.__app;
-    toast(err.message || '切换团队失败', 'error');
+    window.__app.toast(err.message || '切换团队失败', 'error');
   }
 }
 
@@ -289,15 +247,7 @@ export function openModal(title, body, onOk) {
   modalBackdrop.classList.add('show');
   modalDialog.classList.add('show');
   document.body.style.overflow = 'hidden';
-  
-  // 设置默认的确定按钮点击事件
-  modalOkBtn.onclick = () => {
-    if (modalOnOk) {
-      modalOnOk();
-    } else {
-      closeModal();
-    }
-  };
+  modalOkBtn.onclick = () => { if (modalOnOk) modalOnOk(); else closeModal(); };
 }
 
 export function closeModal() {
@@ -310,7 +260,6 @@ export function closeModal() {
 function renderDrawer() {
   const current = currentNavPath();
   let html = '';
-  
   for (const group of NAV_MENU) {
     html += `<div class="drawer-group"><div class="drawer-group-title">${group.group}</div>`;
     for (const item of group.items) {
@@ -329,21 +278,16 @@ function renderDrawer() {
     }
     html += '</div>';
   }
-  
   drawerNav.innerHTML = html;
-  
+
   drawerNav.querySelectorAll('.drawer-item').forEach(el => {
     if (el.dataset.action === 'logout') {
       el.addEventListener('click', () => {
         closeDrawer();
-        openConfirm('退出登录', '确定要退出登录吗？', () => {
-          window.__app.logout();
-        });
+        openConfirm('退出登录', '确定要退出登录吗？', () => window.__app.logout());
       });
     } else {
-      el.addEventListener('click', () => {
-        closeDrawer();
-      });
+      el.addEventListener('click', () => closeDrawer());
     }
   });
 }
@@ -353,20 +297,18 @@ export function updateDrawerUser(name, tenant, avatarData) {
   const tenantEl = document.getElementById('drawer-tenant');
   const avatarEl = document.getElementById('drawer-avatar');
 
-  if (nameEl) nameEl.textContent = '简仓';
-  if (tenantEl) tenantEl.textContent = '进销存管理系统';
+  if (nameEl) nameEl.textContent = name || '简仓';
+  if (tenantEl) tenantEl.textContent = tenant || '进销存管理系统';
   if (avatarEl) {
     if (avatarData) {
       avatarEl.innerHTML = `<img src="${avatarData}" alt="头像" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
     } else {
-      avatarEl.textContent = name ? name[0] : '简';
+      avatarEl.textContent = name ? name[0].toUpperCase() : '仓';
     }
   }
   if (headerTenant) {
     headerTenant.textContent = tenant || '';
-    if (tenant) {
-      headerTenant.style.cursor = 'pointer';
-    }
+    headerTenant.hidden = !tenant;
   }
 }
 
@@ -387,21 +329,23 @@ function currentNavPath() {
 
 function handleRoute() {
   const resolved = resolveRoute();
+  if (!resolved) { navigate('/'); return; }
 
-  if (!resolved) {
-    navigate('/');
-    return;
-  }
-
-  if (currentPage && currentPage.unmount) {
-    currentPage.unmount();
-  }
+  if (currentPage && currentPage.unmount) currentPage.unmount();
 
   pageContainer.innerHTML = '';
   currentPage = resolved.config.module;
   currentPage.mount(pageContainer);
 
   headerTitle.textContent = resolved.config.title;
-  
+
+  // 二级页面：显示返回按钮，隐藏汉堡菜单；一级页面反之
+  const isSubPage = !!resolved.config.parent;
+  headerMenuBtn.hidden = isSubPage;
+  headerBackBtn.hidden = !isSubPage;
+
+  // 二级页面隐藏右侧租户切换，减少干扰
+  if (headerTenant) headerTenant.hidden = isSubPage || !headerTenant.textContent;
+
   renderDrawer();
 }

@@ -178,6 +178,33 @@ class InventoryQueryServiceMixin:
             connection.commit()
         return {"message": "往来单位已创建"}
 
+    def update_partner(
+        self, context: RequestContext, partner_id: int, partner_type: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._validate_partner_type(partner_type)
+        name = self._required_text(payload, "name")
+        contact = self._text(payload, "contact")
+        phone = self._text(payload, "phone")
+        note = self._text(payload, "note")
+
+        with get_connection(self.db_path) as connection:
+            cursor = connection.execute(
+                "SELECT id FROM partners WHERE id = ? AND tenant_id = ? AND partner_type = ? AND is_deleted = 0",
+                (partner_id, context.tenant_id, partner_type),
+            )
+            if cursor.fetchone() is None:
+                raise ValidationError("往来单位不存在或已删除。")
+            connection.execute(
+                """
+                UPDATE partners
+                SET name = ?, contact = ?, phone = ?, note = ?
+                WHERE id = ? AND tenant_id = ?
+                """,
+                (name, contact, phone, note, partner_id, context.tenant_id),
+            )
+            connection.commit()
+        return {"message": "往来单位已更新"}
+
     def get_summary(self, context: RequestContext) -> dict[str, Any]:
         with get_connection(self.db_path) as connection:
             counts = self._summary_counts(connection, context.tenant_id)
