@@ -433,7 +433,12 @@ class JianCangHandler(BaseHTTPRequestHandler):
                 end_date=query.get("end_date", [""])[0] or None,
             )
         else:
-            return False
+            audit_match = re.fullmatch(r"/api/documents/(\d+)/audit-logs", path)
+            if audit_match:
+                document_id = int(audit_match.group(1))
+                result = self.service.get_document_audit_logs(context, document_id)
+            else:
+                return False
 
         self._send_json(result)
         return True

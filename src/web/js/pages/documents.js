@@ -9,8 +9,6 @@ const PAGE_SIZE = 30;
 
 let docFilter = 'all';
 let docItemKeyword = '';
-let dateFrom = '';
-let dateTo = '';
 let visibleCount = PAGE_SIZE;
 
 export function mount(container) {
@@ -46,12 +44,6 @@ function render(container) {
           </svg>
           <input id="doc-item-search" type="text" placeholder="按商品名搜索" value="${escapeHtml(docItemKeyword)}" />
         </div>
-        <div class="date-range-row doc-filter-range">
-          <input type="date" class="date-input" id="date-from" value="${dateFrom}" placeholder="开始日期">
-          <span class="date-sep">—</span>
-          <input type="date" class="date-input" id="date-to" value="${dateTo}" placeholder="结束日期">
-          <button class="date-clear-btn" id="date-clear" title="清除">✕</button>
-        </div>
       </div>
     </div>
     <div class="page-section" style="padding-top:0;">
@@ -67,12 +59,6 @@ function getFiltered(docs) {
   let filtered = docs;
   if (docFilter !== 'all') {
     filtered = filtered.filter(d => d.doc_type === docFilter);
-  }
-  if (dateFrom) {
-    filtered = filtered.filter(d => d.created_at && d.created_at.slice(0, 10) >= dateFrom);
-  }
-  if (dateTo) {
-    filtered = filtered.filter(d => d.created_at && d.created_at.slice(0, 10) <= dateTo);
   }
   const keyword = docItemKeyword.trim().toLowerCase();
   if (keyword) {
@@ -121,13 +107,15 @@ function renderDocCard(d) {
         <div class="doc-card-amount font-num">${formatCurrency(d.total_amount)}</div>
       </div>
       ${renderItemSummary(d.items)}
-      ${renderCardAuditLogs(d.audit_logs)}
       ${d.note ? `<div class="doc-card-note">${escapeHtml(d.note)}</div>` : ''}
       <div class="doc-card-foot">
-        <span class="doc-card-time">${formatDateTime(d.created_at)}${d.created_by_name ? ` · ${escapeHtml(d.created_by_name)}` : ''}</span>
-        <button class="item-action-btn ${actionClass}" data-doc-id="${d.id}" data-doc-action="${actionType}">
-          ${actionLabel}
-        </button>
+        <span class="doc-card-time">${formatDateTime(d.transaction_time || d.created_at)}</span>
+        <span class="doc-card-foot-actions">
+          <button class="item-action-btn btn-ghost" data-doc-id="${d.id}" data-doc-action="audit-logs">操作记录</button>
+          <button class="item-action-btn ${actionClass}" data-doc-id="${d.id}" data-doc-action="${actionType}">
+            ${actionLabel}
+          </button>
+        </span>
       </div>
     </div>
   `;
@@ -146,23 +134,6 @@ function renderItemSummary(items) {
           <span class="doc-card-item-meta">${formatQuantity(item.quantity || 0)} × ${formatCurrency(item.unit_price || 0)} = ${formatCurrency(lineAmount)}</span>
         </div>`;
       }).join('')}
-    </div>
-  `;
-}
-
-function renderCardAuditLogs(logs) {
-  const safeLogs = Array.isArray(logs) ? logs : [];
-  if (!safeLogs.length) return '';
-  const actionLabel = { void: '作废', restore: '恢复' };
-  return `
-    <div class="doc-card-audit">
-      ${safeLogs.map(log => `
-        <div class="doc-card-audit-row">
-          <span class="doc-card-audit-tag ${log.action === 'void' ? 'is-void' : 'is-restore'}">${actionLabel[log.action] || log.action}</span>
-          <span class="doc-card-audit-text">${escapeHtml(log.operator_name || '未知')}${log.reason ? ' · ' + escapeHtml(log.reason) : ''}</span>
-          <span class="doc-card-audit-time">${formatDateTime(log.created_at)}</span>
-        </div>
-      `).join('')}
     </div>
   `;
 }
@@ -186,46 +157,17 @@ function bindEvents(container) {
     });
   }
 
-  const dateFromInput = container.querySelector('#date-from');
-  const dateToInput = container.querySelector('#date-to');
-  if (dateFromInput) {
-    dateFromInput.addEventListener('change', () => {
-      dateFrom = dateFromInput.value;
-      visibleCount = PAGE_SIZE;
-      renderDocList(container, getState().documents);
-    });
-  }
-  if (dateToInput) {
-    dateToInput.addEventListener('change', () => {
-      dateTo = dateToInput.value;
-      visibleCount = PAGE_SIZE;
-      renderDocList(container, getState().documents);
-    });
-  }
-  const clearBtn = container.querySelector('#date-clear');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      dateFrom = ''; dateTo = '';
-      if (dateFromInput) dateFromInput.value = '';
-      if (dateToInput) dateToInput.value = '';
-      visibleCount = PAGE_SIZE;
-      renderDocList(container, getState().documents);
-    });
-  }
-
-  // Infinite scroll / load more
   const loadMoreEl = container.querySelector('#doc-load-more');
-  const scroller = document.querySelector('.app-content') || window;
   const onScroll = () => {
-    const scrollEl = scroller === window ? document.documentElement : scroller;
+    const scrollEl = document.documentElement;
     const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
     if (distFromBottom < 120 && loadMoreEl && loadMoreEl.style.display !== 'none') {
       visibleCount += PAGE_SIZE;
       renderDocList(container, getState().documents);
     }
   };
-  scroller.addEventListener('scroll', onScroll, { passive: true });
-  container._docScrollCleanup = () => scroller.removeEventListener('scroll', onScroll);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  container._docScrollCleanup = () => window.removeEventListener('scroll', onScroll);
 
   const docList = container.querySelector('#doc-list');
   if (!docList) return;
@@ -237,6 +179,11 @@ function bindEvents(container) {
     const docId = Number(actionBtn.dataset.docId);
     const actionType = actionBtn.dataset.docAction;
     if (!docId || !actionType) return;
+
+    if (actionType === 'audit-logs') {
+      openAuditLogsModal(docId);
+      return;
+    }
 
     if (actionType === 'void') {
       openConfirm('作废单据', '确定要作废此单据吗？作废后将冲销库存。', async () => {
@@ -261,6 +208,41 @@ function bindEvents(container) {
   });
 }
 
+async function openAuditLogsModal(docId) {
+  const actionLabel = { void: '作废', restore: '恢复' };
+  try {
+    const data = await api.getDocumentAuditLogs(docId);
+    const logsHtml = (data.audit_logs || []).length
+      ? data.audit_logs.map(log => `
+        <div class="doc-card-audit-row">
+          <span class="doc-card-audit-tag ${log.action === 'void' ? 'is-void' : 'is-restore'}">${actionLabel[log.action] || log.action}</span>
+          <span class="doc-card-audit-text">${escapeHtml(log.operator_name || '未知')}${log.reason ? ' · ' + escapeHtml(log.reason) : ''}</span>
+          <span class="doc-card-audit-time">${formatDateTime(log.created_at)}</span>
+        </div>
+      `).join('')
+      : '<div class="empty-hint">暂无操作记录</div>';
+
+    const body = `
+      <div class="audit-logs-detail">
+        <div class="audit-logs-section">
+          <div class="audit-logs-label">创建信息</div>
+          <div class="audit-logs-info">
+            <span>创建时间：${formatDateTime(data.created_at)}</span>
+            <span>创建人：${escapeHtml(data.created_by_name || '未知')}</span>
+          </div>
+        </div>
+        <div class="audit-logs-section">
+          <div class="audit-logs-label">操作日志</div>
+          <div class="doc-card-audit">${logsHtml}</div>
+        </div>
+      </div>
+    `;
+    openModal(`操作记录 · ${escapeHtml(data.doc_no)}`, body, () => closeModal(), { hideCancel: true });
+  } catch (err) {
+    toast(err.message || '获取操作记录失败', 'error');
+  }
+}
+
 function openNewDocModal() {
   openModal('新建单据', `
     <div class="settings-card">
@@ -281,7 +263,7 @@ function openNewDocModal() {
         </button>
       </div>
     </div>
-  `, () => closeModal());
+  `, () => closeModal(), { hideCancel: true, hideOk: true });
 
   requestAnimationFrame(() => {
     const body = document.getElementById('modal-body');

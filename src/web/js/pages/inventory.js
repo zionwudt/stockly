@@ -1,5 +1,5 @@
 import { getState } from '../store.js';
-import { formatCurrency, formatQuantity, signedQuantity, formatDateTime, typeLabel, escapeHtml } from '../utils.js';
+import { formatCurrency, formatShortCurrency, formatQuantity, signedQuantity, formatDateTime, typeLabel, escapeHtml } from '../utils.js';
 import { openModal, closeModal } from '../router.js';
 import { openAdjustmentModal } from './adjustment.js';
 
@@ -13,7 +13,23 @@ export function mount(container) {
   visibleCount = PAGE_SIZE;
   const { stock } = getState();
 
+  const totalProducts = stock.filter(s => s.on_hand > 0).length;
+  const totalValue = stock.reduce((sum, s) => sum + (s.inventory_value || 0), 0);
+
   container.innerHTML = `
+    <div class="page-section">
+      <div class="metric-row-2">
+        <div class="metric-card metric-card-purchase">
+          <div class="metric-label">在库商品</div>
+          <div class="metric-value">${totalProducts} <span style="font-size:14px;font-weight:400">种</span></div>
+        </div>
+        <div class="metric-card metric-card-sale">
+          <div class="metric-label">库存总价值</div>
+          <div class="metric-value">${formatShortCurrency(totalValue)}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="page-section">
       <div class="search-bar">
         <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

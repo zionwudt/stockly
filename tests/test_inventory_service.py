@@ -434,6 +434,6 @@ def _set_document_timestamp(service: InventoryService, doc_no: str, created_at: 
             "SELECT id FROM documents WHERE tenant_id = 1 AND doc_no = ?",
             (doc_no,),
         ).fetchone()[0]
-        connection.execute("UPDATE documents SET created_at = ? WHERE id = ?", (created_at, document_id))
+        connection.execute("UPDATE documents SET created_at = ?, transaction_time = ? WHERE id = ?", (created_at, created_at, document_id))
         connection.execute("UPDATE stock_movements SET created_at = ? WHERE document_id = ?", (created_at, document_id))
         connection.commit()

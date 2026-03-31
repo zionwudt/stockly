@@ -142,14 +142,14 @@ class StatisticsServiceMixin:
                     FROM documents
                     WHERE tenant_id = ?
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS document_count,
                 (
-                    SELECT COUNT(DISTINCT DATE(created_at))
+                    SELECT COUNT(DISTINCT DATE(transaction_time))
                     FROM documents
                     WHERE tenant_id = ?
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS active_days,
                 (
                     SELECT COUNT(*)
@@ -157,7 +157,7 @@ class StatisticsServiceMixin:
                     WHERE tenant_id = ?
                       AND doc_type = 'purchase'
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS purchase_docs,
                 (
                     SELECT COUNT(*)
@@ -165,7 +165,7 @@ class StatisticsServiceMixin:
                     WHERE tenant_id = ?
                       AND doc_type = 'sale'
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS sale_docs,
                 (
                     SELECT COUNT(*)
@@ -173,7 +173,7 @@ class StatisticsServiceMixin:
                     WHERE tenant_id = ?
                       AND doc_type = 'adjustment'
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS adjustment_docs,
                 (
                     SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
@@ -181,7 +181,7 @@ class StatisticsServiceMixin:
                     WHERE tenant_id = ?
                       AND doc_type = 'purchase'
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS purchase_amount,
                 (
                     SELECT ROUND(COALESCE(SUM(total_amount), 0), 2)
@@ -189,7 +189,7 @@ class StatisticsServiceMixin:
                     WHERE tenant_id = ?
                       AND doc_type = 'sale'
                       AND status = 'active'
-                      AND DATE(created_at) BETWEEN ? AND ?
+                      AND DATE(transaction_time) BETWEEN ? AND ?
                 ) AS sale_amount,
                 (
                     SELECT ROUND(COALESCE(SUM(CASE WHEN movement_type = 'purchase' THEN ABS(quantity_delta) ELSE 0 END), 0), 2)
@@ -254,7 +254,7 @@ class StatisticsServiceMixin:
         return connection.execute(
             """
             SELECT
-                STRFTIME('%Y-%m', d.created_at) AS month_key,
+                STRFTIME('%Y-%m', d.transaction_time) AS month_key,
                 ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'purchase' THEN d.total_amount ELSE 0 END), 0), 2) AS purchase_amount,
                 ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'sale' THEN d.total_amount ELSE 0 END), 0), 2) AS sale_amount,
                 SUM(CASE WHEN d.doc_type = 'purchase' THEN 1 ELSE 0 END) AS purchase_docs,
@@ -263,7 +263,7 @@ class StatisticsServiceMixin:
             FROM documents d
             WHERE d.tenant_id = ?
               AND d.status = 'active'
-              AND DATE(d.created_at) BETWEEN ? AND ?
+              AND DATE(d.transaction_time) BETWEEN ? AND ?
             GROUP BY month_key
             ORDER BY month_key ASC
             """,
@@ -455,13 +455,13 @@ class StatisticsServiceMixin:
         return connection.execute(
             """
             SELECT
-                DATE(d.created_at) AS day_key,
+                DATE(d.transaction_time) AS day_key,
                 ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'purchase' THEN d.total_amount ELSE 0 END), 0), 2) AS purchase_amount,
                 ROUND(COALESCE(SUM(CASE WHEN d.doc_type = 'sale' THEN d.total_amount ELSE 0 END), 0), 2) AS sale_amount
             FROM documents d
             WHERE d.tenant_id = ?
               AND d.status = 'active'
-              AND DATE(d.created_at) BETWEEN ? AND ?
+              AND DATE(d.transaction_time) BETWEEN ? AND ?
             GROUP BY day_key
             ORDER BY day_key ASC
             """,
@@ -518,7 +518,7 @@ class StatisticsServiceMixin:
                 AND d.tenant_id = p.tenant_id
                 AND d.doc_type = ?
                 AND d.status = 'active'
-                AND DATE(d.created_at) BETWEEN ? AND ?
+                AND DATE(d.transaction_time) BETWEEN ? AND ?
             WHERE p.tenant_id = ?
               AND p.partner_type = ?
               AND p.is_deleted = 0

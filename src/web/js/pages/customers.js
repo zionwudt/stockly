@@ -118,10 +118,10 @@ function bindEvents(container) {
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteId;
       const name = deleteBtn.dataset.deleteName || '';
-      openConfirm('删除客户', `确定要删除客户"${name}"吗？`, async () => {
+      openConfirm('删除客户', `确定要删除客户"${name}"吗？如存在关联单据将自动归档。`, async () => {
         try {
-          await api.deleteCustomer(Number(id));
-          await window.__app.refreshData('客户已删除');
+          const res = await api.deleteCustomer(Number(id));
+          await window.__app.refreshData(res.message || '客户已删除');
         } catch (err) {
           toast(err.message || '删除失败', 'error');
         }

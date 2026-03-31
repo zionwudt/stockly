@@ -92,4 +92,5 @@ export const api = {
   // Document void operation
   voidDocument: (id, reason) => post(`/api/documents/${id}/void`, { reason }),
   restoreDocument: (id) => post(`/api/documents/${id}/restore`, {}),
+  getDocumentAuditLogs: (id) => get(`/api/documents/${id}/audit-logs`),
 };

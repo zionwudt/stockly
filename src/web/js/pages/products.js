@@ -132,10 +132,10 @@ function bindEvents(container) {
     if (deleteBtn) {
       const id = deleteBtn.dataset.deleteId;
       const name = deleteBtn.dataset.deleteName || '';
-      openConfirm('删除商品', `确定要删除商品"${name}"吗？`, async () => {
+      openConfirm('删除商品', `确定要删除商品"${name}"吗？如存在关联单据将自动归档。`, async () => {
         try {
-          await api.deleteProduct(Number(id));
-          await window.__app.refreshData('商品已删除');
+          const res = await api.deleteProduct(Number(id));
+          await window.__app.refreshData(res.message || '商品已删除');
         } catch (err) {
           toast(err.message || '删除失败', 'error');
         }
@@ -163,13 +163,24 @@ function openProductModal(product = null) {
   const isEdit = !!product;
   const title = isEdit ? '编辑商品' : '新增商品';
   const p = product || {};
+  const autoSku = isEdit ? fv(p.sku) : generateSku();
+
+  const skuField = isEdit
+    ? `<div class="form-field">
+        <label>SKU</label>
+        <input name="sku" class="form-input" type="text" value="${fv(p.sku)}" required>
+      </div>`
+    : `<div class="form-field">
+        <label>SKU</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input name="sku" class="form-input" type="text" value="${autoSku}" readonly style="flex:1;background:var(--bg-2,#f5f5f5);color:var(--text-2);cursor:default">
+          <button type="button" id="sku-regen-btn" class="btn btn-sm btn-outline" style="white-space:nowrap">重新生成</button>
+        </div>
+      </div>`;
 
   const body = `
     <form id="modal-product-form">
-      <div class="form-field">
-        <label>SKU</label>
-        <input name="sku" class="form-input" type="text" placeholder="JC-001" value="${fv(p.sku)}" required>
-      </div>
+      ${skuField}
       <div class="form-field">
         <label>商品名称</label>
         <input name="name" class="form-input" type="text" placeholder="商品名称" value="${fv(p.name)}" required>
@@ -213,6 +224,19 @@ function openProductModal(product = null) {
       toast(err.message || '操作失败', 'error');
     }
   });
+
+  if (!isEdit) {
+    requestAnimationFrame(() => {
+      document.getElementById('sku-regen-btn')?.addEventListener('click', () => {
+        const skuInput = document.querySelector('#modal-product-form input[name="sku"]');
+        if (skuInput) skuInput.value = generateSku();
+      });
+    });
+  }
+}
+
+function generateSku() {
+  return 'JC' + Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 function isLowStock(p) {

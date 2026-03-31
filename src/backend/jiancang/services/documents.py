@@ -63,6 +63,7 @@ class DocumentServiceMixin:
             d.note,
             d.total_amount,
             d.status,
+            d.transaction_time,
             d.created_at,
             COALESCE(p.name, '库存调整') AS partner_name,
             COALESCE(u.display_name, u.username, '') AS created_by_name,
@@ -76,7 +77,7 @@ class DocumentServiceMixin:
         LEFT JOIN users u ON u.id = d.created_by
         WHERE d.tenant_id = ?
         {type_filter}
-        ORDER BY d.created_at DESC, d.id DESC
+        ORDER BY d.transaction_time DESC, d.id DESC
         LIMIT ?
         """
         parameters.append(safe_limit)
@@ -124,43 +125,56 @@ class DocumentServiceMixin:
         for document in documents:
             document["items"] = items_by_doc.get(int(document["id"]), [])
 
+
+        return documents
+
+    def get_document_audit_logs(
+        self, context: RequestContext, document_id: int
+    ) -> dict[str, Any]:
         with get_connection(self.db_path) as connection:
-            audit_query = f"""
-            SELECT
-                a.document_id,
-                a.action,
-                a.reason,
-                a.created_at,
-                COALESCE(u.display_name, u.username, '') AS operator_name
-            FROM document_audit_logs a
-            LEFT JOIN users u ON u.id = a.user_id
-            WHERE a.tenant_id = ?
-              AND a.document_id IN ({placeholders})
-            ORDER BY a.document_id ASC, a.created_at ASC, a.id ASC
-            """
+            doc_row = connection.execute(
+                """
+                SELECT d.id, d.doc_no, d.created_at,
+                       COALESCE(u.display_name, u.username, '') AS created_by_name
+                FROM documents d
+                LEFT JOIN users u ON u.id = d.created_by
+                WHERE d.id = ? AND d.tenant_id = ?
+                """,
+                (document_id, context.tenant_id),
+            ).fetchone()
+
+            if doc_row is None:
+                raise ValidationError("单据不存在。")
+
             audit_rows = connection.execute(
-                audit_query,
-                (context.tenant_id, *document_ids),
+                """
+                SELECT
+                    a.action,
+                    a.reason,
+                    a.created_at,
+                    COALESCE(u.display_name, u.username, '') AS operator_name
+                FROM document_audit_logs a
+                LEFT JOIN users u ON u.id = a.user_id
+                WHERE a.tenant_id = ? AND a.document_id = ?
+                ORDER BY a.created_at ASC, a.id ASC
+                """,
+                (context.tenant_id, document_id),
             ).fetchall()
 
-        audit_by_doc: dict[int, list[dict[str, Any]]] = {
-            document_id: [] for document_id in document_ids
-        }
-        for row in audit_rows:
-            document_id = int(row["document_id"])
-            audit_by_doc.setdefault(document_id, []).append(
+        return {
+            "doc_no": doc_row["doc_no"],
+            "created_at": doc_row["created_at"],
+            "created_by_name": doc_row["created_by_name"],
+            "audit_logs": [
                 {
                     "action": row["action"],
                     "reason": row["reason"],
                     "created_at": row["created_at"],
                     "operator_name": row["operator_name"],
                 }
-            )
-
-        for document in documents:
-            document["audit_logs"] = audit_by_doc.get(int(document["id"]), [])
-
-        return documents
+                for row in audit_rows
+            ],
+        }
 
     def create_purchase(
         self, context: RequestContext, payload: dict[str, Any]
@@ -193,6 +207,7 @@ class DocumentServiceMixin:
         quantity_delta = self._number(payload, "quantity_delta")
         reason = self._required_text(payload, "reason")
         note = self._text(payload, "note")
+        transaction_time = self._text(payload, "transaction_time") or _db_now()
 
         if not product_id:
             raise ValidationError("请选择需要调整的商品。")
@@ -218,6 +233,7 @@ class DocumentServiceMixin:
                 note_text,
                 0,
                 created_by=context.user_id,
+                transaction_time=transaction_time,
             )
             self._insert_document_item(
                 connection,
@@ -390,6 +406,7 @@ class DocumentServiceMixin:
         success_message: str,
     ) -> dict[str, Any]:
         note = self._text(payload, "note")
+        transaction_time = self._text(payload, "transaction_time") or _db_now()
         items = self._normalize_items(payload)
 
         with get_connection(self.db_path) as connection:
@@ -412,6 +429,7 @@ class DocumentServiceMixin:
                 note,
                 total_amount,
                 created_by=context.user_id,
+                transaction_time=transaction_time,
             )
             self._insert_trade_items(
                 connection,
@@ -452,13 +470,15 @@ class DocumentServiceMixin:
         note: str,
         total_amount: float,
         created_by: int | None = None,
+        transaction_time: str | None = None,
     ) -> int:
+        actual_transaction_time = transaction_time or _db_now()
         connection.execute(
             """
-            INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by, transaction_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by),
+            (tenant_id, doc_no, doc_type, partner_id, note, total_amount, created_by, actual_transaction_time),
         )
         return int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
 

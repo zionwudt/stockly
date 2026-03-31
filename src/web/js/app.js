@@ -20,7 +20,7 @@ const AUTH_PATH = '/';
 // Route definitions
 const ROUTES = {
   '/':           { module: home,       title: '简仓' },
-  '/inventory':  { module: inventory,  title: '库存查询' },
+  '/inventory':  { module: inventory,  title: '库存管理' },
   '/documents':  { module: documents,  title: '单据列表' },
   '/account':    { module: account,    title: '账号管理' },
   '/products':   { module: products,   title: '商品列表' },

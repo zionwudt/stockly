@@ -117,6 +117,7 @@ SCHEMA_STATEMENTS = [
         note TEXT NOT NULL DEFAULT '',
         total_amount REAL NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'active',
+        transaction_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         voided_at TEXT,
         void_reason TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

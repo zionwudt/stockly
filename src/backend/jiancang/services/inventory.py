@@ -39,12 +39,32 @@ class InventoryQueryServiceMixin:
             )
             if cursor.fetchone() is None:
                 raise ValidationError("商品不存在或已删除。")
-            connection.execute(
-                "UPDATE products SET is_deleted = 1, deleted_at = ? WHERE id = ?",
-                (_db_now(), product_id),
-            )
-            connection.commit()
-        return {"message": "商品已删除"}
+            has_docs = connection.execute(
+                """
+                SELECT 1 FROM document_items
+                WHERE product_id = ? AND tenant_id = ?
+                LIMIT 1
+                """,
+                (product_id, context.tenant_id),
+            ).fetchone() is not None
+            if has_docs:
+                connection.execute(
+                    "UPDATE products SET is_deleted = 1, deleted_at = ? WHERE id = ?",
+                    (_db_now(), product_id),
+                )
+                connection.commit()
+                return {"message": "商品已归档（存在关联单据，历史数据保留）", "archived": True}
+            else:
+                connection.execute(
+                    "DELETE FROM stock_movements WHERE product_id = ? AND tenant_id = ?",
+                    (product_id, context.tenant_id),
+                )
+                connection.execute(
+                    "DELETE FROM products WHERE id = ? AND tenant_id = ?",
+                    (product_id, context.tenant_id),
+                )
+                connection.commit()
+                return {"message": "商品已删除", "archived": False}
 
     def update_product(
         self, context: RequestContext, product_id: int, payload: dict[str, Any]
@@ -146,17 +166,35 @@ class InventoryQueryServiceMixin:
     ) -> dict[str, Any]:
         with get_connection(self.db_path) as connection:
             cursor = connection.execute(
-                "SELECT id FROM partners WHERE id = ? AND tenant_id = ? AND is_deleted = 0",
+                "SELECT id, partner_type FROM partners WHERE id = ? AND tenant_id = ? AND is_deleted = 0",
                 (partner_id, context.tenant_id),
             )
-            if cursor.fetchone() is None:
+            row = cursor.fetchone()
+            if row is None:
                 raise ValidationError("往来单位不存在或已删除。")
-            connection.execute(
-                "UPDATE partners SET is_deleted = 1, deleted_at = ? WHERE id = ?",
-                (_db_now(), partner_id),
-            )
-            connection.commit()
-        return {"message": "往来单位已删除"}
+            label = "供应商" if row["partner_type"] == "supplier" else "客户"
+            has_docs = connection.execute(
+                """
+                SELECT 1 FROM documents
+                WHERE partner_id = ? AND tenant_id = ?
+                LIMIT 1
+                """,
+                (partner_id, context.tenant_id),
+            ).fetchone() is not None
+            if has_docs:
+                connection.execute(
+                    "UPDATE partners SET is_deleted = 1, deleted_at = ? WHERE id = ?",
+                    (_db_now(), partner_id),
+                )
+                connection.commit()
+                return {"message": f"{label}已归档（存在关联单据，历史数据保留）", "archived": True}
+            else:
+                connection.execute(
+                    "DELETE FROM partners WHERE id = ? AND tenant_id = ?",
+                    (partner_id, context.tenant_id),
+                )
+                connection.commit()
+                return {"message": f"{label}已删除", "archived": False}
 
     def create_partner(
         self, context: RequestContext, partner_type: str, payload: dict[str, Any]

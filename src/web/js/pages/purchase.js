@@ -17,16 +17,20 @@ export function openPurchaseModal() {
           }
         </select>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="margin-bottom:8px">
         <span style="font-size:13px;font-weight:600;color:var(--text-2)">商品明细</span>
-        <button type="button" class="btn btn-sm btn-outline" id="modal-purchase-add-row">添加</button>
       </div>
       <div id="modal-purchase-lines">
         ${purchaseLineHtml(products)}
       </div>
+      <button type="button" class="btn btn-sm btn-outline" id="modal-purchase-add-row" style="width:100%;margin-bottom:12px">＋ 添加商品</button>
       <div class="form-field">
         <label>备注</label>
         <input name="note" class="form-input" type="text" placeholder="批次、仓位、到货说明">
+      </div>
+      <div class="form-field">
+        <label>交易时间</label>
+        <input name="transaction_time" class="form-input" type="datetime-local">
       </div>
     </form>
   `;
@@ -38,6 +42,7 @@ export function openPurchaseModal() {
     const payload = {
       partner_id: Number(form.elements.partner_id.value),
       note: form.elements.note.value.trim(),
+      transaction_time: form.elements.transaction_time.value ? form.elements.transaction_time.value.replace('T', ' ') : '',
       items: rows.map(row => ({
         product_id: Number(row.querySelector('select[name="product_id"]').value),
         quantity: Number(row.querySelector('input[name="quantity"]').value),
@@ -56,6 +61,10 @@ export function openPurchaseModal() {
   requestAnimationFrame(() => {
     const container = document.getElementById('modal-purchase-form');
     if (!container) return;
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    container.elements.transaction_time.value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
     container.querySelector('#modal-purchase-add-row')?.addEventListener('click', () => {
       document.getElementById('modal-purchase-lines').insertAdjacentHTML('beforeend', purchaseLineHtml(products));

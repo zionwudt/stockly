@@ -588,6 +588,7 @@ img { max-width: 100%; display: block; }
 }
 
 .empty-hint { padding: 36px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+.load-more-hint { padding: 16px; text-align: center; color: var(--text-3); font-size: 13px; }
 
 .empty-state { padding: 60px 24px; text-align: center; color: var(--text-3); }
 .empty-state p { margin-bottom: 16px; }
@@ -2091,111 +2092,49 @@ select.form-input {
   color: var(--text-3);
 }
 
-
-/* ============================================================
-   Date Range Row
-   ============================================================ */
-.date-range-row {
+.doc-card-foot-actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 10px;
-}
-
-.date-input {
-  flex: 1;
-  height: 36px;
-  padding: 0 10px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  font-size: 13px;
-  outline: none;
-  color: var(--text-1);
-  min-width: 0;
-  transition: border-color var(--t);
-}
-.date-input:focus { border-color: var(--primary); }
-
-.date-sep {
-  font-size: 13px;
-  color: var(--text-4);
   flex-shrink: 0;
 }
 
-.date-clear-btn {
-  width: 28px;
-  height: 28px;
+.item-action-btn.btn-ghost {
+  background: var(--bg);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--r-xs);
+}
+.item-action-btn.btn-ghost:active {
+  background: var(--border);
+}
+
+/* Audit Logs Detail Modal */
+.audit-logs-detail {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 16px;
+}
+.audit-logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.audit-logs-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.audit-logs-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
   color: var(--text-3);
   background: var(--bg);
-  border: 1px solid var(--border);
   border-radius: var(--r-xs);
-  flex-shrink: 0;
-  transition: all var(--t);
-}
-.date-clear-btn:active { background: var(--danger-light); color: var(--danger); }
-
-
-/* ============================================================
-   Load More Hint
-   ============================================================ */
-.load-more-hint {
-  text-align: center;
-  font-size: 13px;
-  color: var(--text-3);
-  padding: 14px 0 4px;
+  padding: 10px 12px;
 }
 
-
-/* ============================================================
-   Tenant Action Buttons (vertical stack, full-width)
-   ============================================================ */
-.tenant-action-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.tenant-action-btns .btn {
-  width: 100%;
-  justify-content: center;
-}
-
-.doc-filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.doc-filter-range {
-  min-width: 100%;
-  margin-bottom: 0;
-}
-
-.doc-filter-search {
-  margin-bottom: 0;
-}
-
-.doc-filter-chip-row {
-  margin-bottom: 0;
-}
-
-.current-tenant-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: 12px 14px;
-  box-shadow: var(--s-xs);
-  margin-bottom: 10px;
-}
-
-.current-tenant-main { flex: 1; min-width: 0; }
-.current-tenant-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
-.current-tenant-meta { font-size: 12px; color: var(--text-3); margin-top: 2px; }

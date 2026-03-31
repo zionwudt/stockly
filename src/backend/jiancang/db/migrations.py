@@ -32,6 +32,7 @@ def init_db(db_path: Path) -> None:
         _migrate_avatar(connection)
         _migrate_admin_role(connection)
         _migrate_stock_movement_types(connection)
+        _migrate_transaction_time(connection)
         for statement in INDEX_STATEMENTS:
             connection.execute(statement)
         _seed_default_identity(connection)
@@ -70,6 +71,20 @@ def _migrate_stock_movement_types(connection: sqlite3.Connection) -> None:
     """)
     connection.execute("DROP TABLE stock_movements")
     connection.execute("ALTER TABLE stock_movements_new RENAME TO stock_movements")
+
+
+def _migrate_transaction_time(connection: sqlite3.Connection) -> None:
+    """Add transaction_time column to documents if missing, defaulting to created_at."""
+    if not _table_exists(connection, "documents"):
+        return
+    if _column_exists(connection, "documents", "transaction_time"):
+        return
+    connection.execute(
+        "ALTER TABLE documents ADD COLUMN transaction_time TEXT NOT NULL DEFAULT ''"
+    )
+    connection.execute(
+        "UPDATE documents SET transaction_time = created_at WHERE transaction_time = ''"
+    )
 
 
 def _migrate_admin_role(connection: sqlite3.Connection) -> None:

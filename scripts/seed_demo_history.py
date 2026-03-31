@@ -53,9 +53,9 @@ def insert_doc_with_items(conn, doc_type: str, partner_id: int, items: list[tupl
     doc_no = next_doc_no(conn, prefix)
     total = sum(qty * price for _, qty, price in items)
     conn.execute(
-        """INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, total_amount, status, created_at)
-           VALUES (?,?,?,?,?,'active',?)""",
-        (TENANT_ID, doc_no, doc_type, partner_id, round(total, 2), ts),
+        """INSERT INTO documents (tenant_id, doc_no, doc_type, partner_id, total_amount, status, transaction_time, created_at)
+           VALUES (?,?,?,?,?,'active',?,?)""",
+        (TENANT_ID, doc_no, doc_type, partner_id, round(total, 2), ts, ts),
     )
     doc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     movement_type = doc_type  # 'purchase' | 'sale'
