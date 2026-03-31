@@ -493,10 +493,10 @@ function renderTenantAccessList(items) {
             <div class="more-entry__top">
               <div class="row-main">
               <div class="row-title">${escapeHtml(item.name)}</div>
-              <div class="row-subtitle">${escapeHtml(item.slug)} · ${item.is_owner ? "所有者" : "成员"}</div>
+              <div class="row-subtitle">${escapeHtml(item.slug)} · ${item.is_owner ? "所有者" : item.is_sysadmin ? "系统管理员" : "成员"}</div>
               </div>
               <div class="more-entry__meta">
-                <span class="status-chip ${item.is_current ? "safe" : "info"}">${item.is_current ? "使用中" : item.is_owner ? "所有者" : "成员"}</span>
+                <span class="status-chip ${item.is_current ? "safe" : "info"}">${item.is_current ? "使用中" : item.is_owner ? "所有者" : item.is_sysadmin ? "系统管理员" : "成员"}</span>
               ${
                 item.is_current
                   ? `<span class="mini-text">当前使用中</span>`

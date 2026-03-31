@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from ..db.constants import SYSADMIN_USER_ID
 from .models import RequestContext, SessionPrincipal
 
 
@@ -30,6 +31,8 @@ class TenantQueryMixin:
         user_id: int,
         tenant_slug: str,
     ) -> sqlite3.Row | None:
+        if user_id == SYSADMIN_USER_ID:
+            return self._tenant_row_by_slug_any(connection, tenant_slug)
         return connection.execute(
             """
             SELECT
@@ -51,6 +54,8 @@ class TenantQueryMixin:
         user_id: int,
         tenant_id: int,
     ) -> sqlite3.Row | None:
+        if user_id == SYSADMIN_USER_ID:
+            return self._tenant_row_by_id_any(connection, tenant_id)
         return connection.execute(
             """
             SELECT
@@ -66,33 +71,78 @@ class TenantQueryMixin:
             (user_id, tenant_id),
         ).fetchone()
 
+    def _tenant_row_by_id_any(self, connection: sqlite3.Connection, tenant_id: int) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT t.id AS tenant_id, t.name AS tenant_name, t.slug AS tenant_slug, 'sysadmin' AS tenant_role
+            FROM tenants t
+            WHERE t.id = ? AND t.status = 'active'
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
+
+    def _tenant_row_by_slug_any(self, connection: sqlite3.Connection, tenant_slug: str) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT t.id AS tenant_id, t.name AS tenant_name, t.slug AS tenant_slug, 'sysadmin' AS tenant_role
+            FROM tenants t
+            WHERE t.slug = ? AND t.status = 'active'
+            LIMIT 1
+            """,
+            (tenant_slug,),
+        ).fetchone()
+
     def _list_accessible_tenants(
         self,
         connection: sqlite3.Connection,
         user_id: int,
         current_tenant_id: int | None,
     ) -> list[dict[str, Any]]:
-        rows = connection.execute(
-            """
-            SELECT
-                t.id,
-                t.name,
-                t.slug,
-                tm.role,
-                tm.created_at AS joined_at,
-                (SELECT COUNT(*) FROM tenant_memberships members WHERE members.tenant_id = t.id) AS member_count,
-                (
-                    SELECT COUNT(*)
-                    FROM tenant_join_requests requests
-                    WHERE requests.tenant_id = t.id AND requests.status = 'pending'
-                ) AS pending_request_count
-            FROM tenant_memberships tm
-            JOIN tenants t ON t.id = tm.tenant_id
-            WHERE tm.user_id = ? AND t.status = 'active'
-            ORDER BY CASE WHEN tm.role = 'owner' THEN 0 WHEN tm.role = 'admin' THEN 1 ELSE 2 END, t.created_at DESC, t.id DESC
-            """,
-            (user_id,),
-        ).fetchall()
+        if user_id == SYSADMIN_USER_ID:
+            rows = connection.execute(
+                """
+                SELECT
+                    t.id,
+                    t.name,
+                    t.slug,
+                    COALESCE(tm.role, 'sysadmin') AS role,
+                    COALESCE(tm.created_at, t.created_at) AS joined_at,
+                    (SELECT COUNT(*) FROM tenant_memberships members WHERE members.tenant_id = t.id) AS member_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM tenant_join_requests requests
+                        WHERE requests.tenant_id = t.id AND requests.status = 'pending'
+                    ) AS pending_request_count
+                FROM tenants t
+                LEFT JOIN tenant_memberships tm ON tm.tenant_id = t.id AND tm.user_id = ?
+                WHERE t.status = 'active'
+                ORDER BY CASE WHEN tm.role = 'owner' THEN 0 WHEN tm.role = 'admin' THEN 1 WHEN tm.role IS NOT NULL THEN 2 ELSE 3 END, t.created_at DESC, t.id DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT
+                    t.id,
+                    t.name,
+                    t.slug,
+                    tm.role,
+                    tm.created_at AS joined_at,
+                    (SELECT COUNT(*) FROM tenant_memberships members WHERE members.tenant_id = t.id) AS member_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM tenant_join_requests requests
+                        WHERE requests.tenant_id = t.id AND requests.status = 'pending'
+                    ) AS pending_request_count
+                FROM tenant_memberships tm
+                JOIN tenants t ON t.id = tm.tenant_id
+                WHERE tm.user_id = ? AND t.status = 'active'
+                ORDER BY CASE WHEN tm.role = 'owner' THEN 0 WHEN tm.role = 'admin' THEN 1 ELSE 2 END, t.created_at DESC, t.id DESC
+                """,
+                (user_id,),
+            ).fetchall()
         return [
             {
                 "id": int(row["id"]),
@@ -101,6 +151,7 @@ class TenantQueryMixin:
                 "role": str(row["role"]),
                 "is_owner": str(row["role"]) == "owner",
                 "is_admin": str(row["role"]) == "admin",
+                "is_sysadmin": str(row["role"]) == "sysadmin",
                 "joined_at": str(row["joined_at"]),
                 "member_count": int(row["member_count"]),
                 "pending_request_count": int(row["pending_request_count"]),

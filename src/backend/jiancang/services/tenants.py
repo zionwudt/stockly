@@ -6,6 +6,7 @@ import random
 from typing import Any
 
 from ..db import get_connection
+from ..db.constants import SYSADMIN_USER_ID
 from ..security import db_now
 from .models import SessionPrincipal, ValidationError
 
@@ -238,27 +239,33 @@ class TenantServiceMixin:
 
     def get_tenant_detail(self, principal: SessionPrincipal, tenant_id: int) -> dict[str, Any]:
         with get_connection(self.db_path) as connection:
-            # Check if user has access to this tenant
-            membership = connection.execute(
-                """
-                SELECT role FROM tenant_memberships
-                WHERE tenant_id = ? AND user_id = ?
-                LIMIT 1
-                """,
-                (tenant_id, principal.user_id),
-            ).fetchone()
-            if not membership:
-                raise ValidationError("你没有访问该租户的权限。")
-            
+            if principal.user_id == SYSADMIN_USER_ID:
+                membership_role = connection.execute(
+                    "SELECT role FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+                    (tenant_id, principal.user_id),
+                ).fetchone()
+                user_role = membership_role["role"] if membership_role else "sysadmin"
+            else:
+                membership = connection.execute(
+                    """
+                    SELECT role FROM tenant_memberships
+                    WHERE tenant_id = ? AND user_id = ?
+                    LIMIT 1
+                    """,
+                    (tenant_id, principal.user_id),
+                ).fetchone()
+                if not membership:
+                    raise ValidationError("你没有访问该租户的权限。")
+                user_role = membership["role"]
+
             tenant_detail = self._get_tenant_detail(connection, tenant_id)
             if not tenant_detail:
                 raise ValidationError("租户不存在。")
-            
+
             members = self._list_tenant_members(connection, tenant_id)
-            
-            # Get pending approvals for this tenant (for owner and admins)
+
             pending_approvals = []
-            if membership["role"] in ("owner", "admin"):
+            if user_role in ("owner", "admin", "sysadmin"):
                 pending_approvals = connection.execute(
                     """
                     SELECT
@@ -276,12 +283,12 @@ class TenantServiceMixin:
                     (tenant_id,),
                 ).fetchall()
                 pending_approvals = [dict(row) for row in pending_approvals]
-            
+
             return {
                 "tenant": tenant_detail,
                 "members": members,
                 "pending_approvals": pending_approvals,
-                "user_role": membership["role"],
+                "user_role": user_role,
             }
 
     def update_tenant_name(self, principal: SessionPrincipal, tenant_id: int, payload: dict[str, Any]) -> dict[str, Any]:

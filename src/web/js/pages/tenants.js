@@ -52,7 +52,7 @@ function render(container) {
               </div>
             </div>
             <div class="tenant-item-right">
-              ${t.is_owner ? '<span class="tag tag-green" style="margin-right:6px">所有者</span>' : t.is_admin ? '<span class="tag tag-blue" style="margin-right:6px">管理员</span>' : ''}
+              ${t.is_owner ? '<span class="tag tag-green" style="margin-right:6px">所有者</span>' : t.is_admin ? '<span class="tag tag-blue" style="margin-right:6px">管理员</span>' : t.is_sysadmin ? '<span class="tag tag-purple" style="margin-right:6px">系统管理员</span>' : ''}
               <span class="text-text-4 list-chevron">${CHEVRON}</span>
             </div>
           </div>
